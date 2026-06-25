@@ -1,9 +1,9 @@
-package handler
+package handlers
 
 import (
 	"net/http"
 	models "practice/internal/model"
-	"strconv"
+	services "practice/internal/service"
 	"strings"
 )
 
@@ -33,9 +33,9 @@ func UpdateHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	typeMetric := getTypeMetric(parts[0])
+	typeMetric := models.GetTypeMetric(parts[0])
 
-	if typeMetric == "null" {
+	if typeMetric == models.Unknown {
 		http.Error(res, "Invalid <TYPE> metric. Only <gauge>(float64) or <counter>(int64) values are supported.", http.StatusBadRequest)
 		return
 	}
@@ -50,41 +50,12 @@ func UpdateHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !parseMetricValue(typeMetric, parts[2]) {
+	if !models.IsParseMetricValue(typeMetric, parts[2]) {
 		http.Error(res, "Invalid <MEANING> metric. Only <gauge>(float64) or <counter>(int64) values are supported.", http.StatusBadRequest)
 		return
 	}
 
+	services.SaveMetric(typeMetric, parts[1], parts[2])
+
 	res.WriteHeader(http.StatusOK)
-}
-
-func getTypeMetric(typeMetric string) string {
-	if typeMetric == models.Gauge {
-		return "float64"
-	}
-
-	if typeMetric == models.Counter {
-		return "int64"
-	}
-
-	return "null"
-}
-
-func parseMetricValue(typeMetric, valueStr string) bool {
-	switch typeMetric {
-	case models.Gauge:
-		if _, err := strconv.ParseFloat(valueStr, 64); err == nil {
-			return true
-		} else {
-			return false
-		}
-	case models.Counter:
-		if _, err := strconv.ParseInt(valueStr, 10, 64); err == nil {
-			return true
-		} else {
-			return false
-		}
-	default:
-		return false
-	}
 }
