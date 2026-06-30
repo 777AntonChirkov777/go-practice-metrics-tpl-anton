@@ -21,15 +21,6 @@ func NewHandler(store storage.MetricStorage) *Handler {
 
 // POST /update/{type}/{name}/{value}
 func (h *Handler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		http.Error(res, "Only POST requests are allowed!", http.StatusMethodNotAllowed)
-		return
-	}
-	if ct := req.Header.Get("Content-Type"); ct != "text/plain" {
-		http.Error(res, "Only Content-Type text/plain is allowed", http.StatusBadRequest)
-		return
-	}
-
 	typeStr := chi.URLParam(req, "type")
 	name := strings.TrimSpace(chi.URLParam(req, "name"))
 	valueStr := strings.TrimSpace(chi.URLParam(req, "value"))
