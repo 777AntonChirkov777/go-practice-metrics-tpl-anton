@@ -126,3 +126,28 @@ func FindMetric(targetID string, targetMType int8) (*models.Metric, error) {
 	}
 	return found, nil
 }
+
+// ReadAll возвращает все метрики из файла.
+func ReadAll() ([]*models.Metric, error) {
+	file, err := os.OpenFile(models.FileName, os.O_RDONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var result []*models.Metric
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var m models.Metric
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			continue
+		}
+		mCopy := m
+		result = append(result, &mCopy)
+	}
+	return result, scanner.Err()
+}

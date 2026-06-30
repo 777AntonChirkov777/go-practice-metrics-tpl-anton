@@ -1,21 +1,28 @@
 package main
 
 import (
+	"log"
 	"net/http"
-	handlers "practice/internal/handler"
 
-	"github.com/labstack/gommon/log"
+	handlers "practice/internal/handler"
+	"practice/internal/storage"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func main() {
-	log.Info("server start")
+	log.Println("server start")
 
-	mux := http.NewServeMux()
-	mux.HandleFunc(`/update/`, handlers.UpdateHandler)
+	store := storage.NewMemStorage() // загружает данные из файла при старте
+	h := handlers.NewHandler(store)
 
-	log.Info("server occupied the port 8080")
-	err := http.ListenAndServe(`:8080`, mux)
-	if err != nil {
-		panic(err)
+	r := chi.NewRouter()
+	r.Get("/", h.ListHandler)
+	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
+	r.Get("/value/{type}/{name}", h.ValueHandler)
+
+	log.Println("server occupied the port 8080")
+	if err := http.ListenAndServe(":8080", r); err != nil {
+		log.Fatal(err)
 	}
 }
