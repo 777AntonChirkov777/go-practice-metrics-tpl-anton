@@ -1,61 +1,124 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
-	models "practice/internal/model"
-	services "practice/internal/service"
+	model "practice/internal/model"
+	"practice/internal/storage"
+	"strconv"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
-func UpdateHandler(res http.ResponseWriter, req *http.Request) {
+type Handler struct {
+	store storage.MetricStorage
+}
 
+func NewHandler(store storage.MetricStorage) *Handler {
+	return &Handler{store: store}
+}
+
+// POST /update/{type}/{name}/{value}
+func (h *Handler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
-		http.Error(res, "Only POST requests are allowed!", http.StatusBadRequest)
+		http.Error(res, "Only POST requests are allowed!", http.StatusMethodNotAllowed)
+		return
+	}
+	if ct := req.Header.Get("Content-Type"); ct != "text/plain" {
+		http.Error(res, "Only Content-Type text/plain is allowed", http.StatusBadRequest)
 		return
 	}
 
-	contentType := req.Header.Get("Content-Type")
-	if contentType != "text/plain" {
-		http.Error(res, "Only contentType text/plain", http.StatusBadRequest)
+	typeStr := chi.URLParam(req, "type")
+	name := strings.TrimSpace(chi.URLParam(req, "name"))
+	valueStr := strings.TrimSpace(chi.URLParam(req, "value"))
+
+	if typeStr == "" || name == "" || valueStr == "" {
+		http.Error(res, "Expected /update/{type}/{name}/{value}", http.StatusBadRequest)
 		return
 	}
 
-	path := strings.TrimPrefix(req.URL.Path, "/update/")
-	parts := strings.Split(path, "/")
-
-	if len(parts) == 0 {
-		http.Error(res, "Invalid URL format. Expected /update/<TYPE>/<NAME>/<MEANING>", http.StatusNotFound)
+	mtype := model.GetTypeMetric(typeStr)
+	if mtype == model.Unknown {
+		http.Error(res, "Invalid metric type", http.StatusBadRequest)
+		return
+	}
+	if !model.IsParseMetricValue(mtype, valueStr) {
+		http.Error(res, "Invalid metric value", http.StatusBadRequest)
 		return
 	}
 
-	if len(parts) < 1 || strings.TrimSpace(parts[0]) == "" {
-		http.Error(res, "Invalid URL format. Expected /update/<TYPE>/<NAME>/<MEANING>", http.StatusNotFound)
+	var m *model.Metric
+	switch mtype {
+	case model.Gauge:
+		v, _ := model.ParseGauge(mtype, valueStr)
+		m = model.NewGaugeMetric(name, v)
+	case model.Counter:
+		v, _ := model.ParseCounter(mtype, valueStr)
+		m = model.NewCountMetric(name, v)
+	}
+	_ = m.CalculateHash()
+
+	if err := h.store.Save(m); err != nil {
+		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	typeMetric := models.GetTypeMetric(parts[0])
-
-	if typeMetric == models.Unknown {
-		http.Error(res, "Invalid <TYPE> metric. Only <gauge>(float64) or <counter>(int64) values are supported.", http.StatusBadRequest)
-		return
-	}
-
-	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
-		http.Error(res, "Invalid URL format. Expected /update/<TYPE>/<NAME>/<MEANING>", http.StatusNotFound)
-		return
-	}
-
-	if len(parts) < 3 || strings.TrimSpace(parts[2]) == "" {
-		http.Error(res, "Invalid URL format. Expected /update/<TYPE>/<NAME>/<MEANING>", http.StatusNotFound)
-		return
-	}
-
-	if !models.IsParseMetricValue(typeMetric, parts[2]) {
-		http.Error(res, "Invalid <MEANING> metric. Only <gauge>(float64) or <counter>(int64) values are supported.", http.StatusBadRequest)
-		return
-	}
-
-	services.SaveMetric(typeMetric, parts[1], parts[2])
 
 	res.WriteHeader(http.StatusOK)
+}
+
+// GET /value/{type}/{name}
+func (h *Handler) ValueHandler(res http.ResponseWriter, req *http.Request) {
+	typeStr := chi.URLParam(req, "type")
+	name := strings.TrimSpace(chi.URLParam(req, "name"))
+
+	mtype := model.GetTypeMetric(typeStr)
+	if mtype == model.Unknown {
+		http.Error(res, "Invalid metric type", http.StatusBadRequest)
+		return
+	}
+
+	m, ok := h.store.Get(mtype, name)
+	if !ok {
+		http.Error(res, "metric not found", http.StatusNotFound)
+		return
+	}
+
+	res.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	res.WriteHeader(http.StatusOK)
+
+	switch mtype {
+	case model.Gauge:
+		res.Write([]byte(strconv.FormatFloat(m.Value, 'f', -1, 64)))
+	case model.Counter:
+		res.Write([]byte(strconv.FormatInt(m.Delta, 10)))
+	}
+}
+
+// GET / — HTML со списком всех метрик
+func (h *Handler) ListHandler(res http.ResponseWriter, req *http.Request) {
+	all := h.store.GetAll()
+
+	var b strings.Builder
+	b.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Metrics</title></head><body>`)
+	b.WriteString("<h1>Metrics</h1><ul>")
+	if len(all) == 0 {
+		b.WriteString("<li>no metrics yet</li>")
+	}
+	for _, m := range all {
+		typeName := model.MetricType(m.MType).String()
+		var val string
+		if m.MType == int8(model.Gauge) {
+			val = strconv.FormatFloat(m.Value, 'f', -1, 64)
+		} else {
+			val = strconv.FormatInt(m.Delta, 10)
+		}
+		b.WriteString(fmt.Sprintf("<li><b>%s</b> [%s] = %s</li>", m.ID, typeName, val))
+	}
+	b.WriteString("</ul></body></html>")
+
+	res.Header().Set("Content-Type", "text/html; charset=utf-8")
+	res.WriteHeader(http.StatusOK)
+	res.Write([]byte(b.String()))
 }
