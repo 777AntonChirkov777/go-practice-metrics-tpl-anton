@@ -1,16 +1,18 @@
 package repositories
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	models "practice/internal/model"
+	"strings"
 )
 
 func SaveMetric(newMetric models.Metric) error {
 	tmpFile := models.FileName + ".tmp"
 
-	// Открываем исходный файл
+	// Открываем исходный файл (если он существует)
 	inFile, err := os.Open(models.FileName)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -28,18 +30,27 @@ func SaveMetric(newMetric models.Metric) error {
 	encoder := json.NewEncoder(outFile)
 	var exists bool
 
-	// Копируем старые записи, заменяя нужную
+	// Если исходный файл открыт, обрабатываем его построчно
 	if inFile != nil {
-		decoder := json.NewDecoder(inFile)
-		for decoder.More() {
-			var m models.Metric
-			if err := decoder.Decode(&m); err != nil {
-				continue
+		scanner := bufio.NewScanner(inFile)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue // пропускаем пустые строки
 			}
+
+			var m models.Metric
+			if err := json.Unmarshal([]byte(line), &m); err != nil {
+				continue // пропускаем некорректные JSON-строки
+			}
+
+			// Если нашли метрику с таким же ID и MType – заменяем её новой
 			if m.ID == newMetric.ID && m.MType == newMetric.MType {
 				m = newMetric
 				exists = true
 			}
+
+			// Перезаписываем метрику во временный файл
 			if err := encoder.Encode(m); err != nil {
 				outFile.Close()
 				inFile.Close()
@@ -47,7 +58,16 @@ func SaveMetric(newMetric models.Metric) error {
 				return err
 			}
 		}
-		// Явно закрываем исходный файл перед переименованием
+
+		// Проверяем ошибки сканера
+		if err := scanner.Err(); err != nil {
+			outFile.Close()
+			inFile.Close()
+			os.Remove(tmpFile)
+			return err
+		}
+
+		// Закрываем исходный файл
 		if err := inFile.Close(); err != nil {
 			outFile.Close()
 			os.Remove(tmpFile)
@@ -55,7 +75,7 @@ func SaveMetric(newMetric models.Metric) error {
 		}
 	}
 
-	// Если метрика не найдена, добавляем новую
+	// Если метрика не была найдена в старом файле – дописываем её
 	if !exists {
 		if err := encoder.Encode(newMetric); err != nil {
 			outFile.Close()
@@ -64,13 +84,13 @@ func SaveMetric(newMetric models.Metric) error {
 		}
 	}
 
-	// Закрываем временный файл перед переименованием
+	// Закрываем временный файл
 	if err := outFile.Close(); err != nil {
 		os.Remove(tmpFile)
 		return err
 	}
 
-	// Атомарная замена на Windows/Linux
+	// Атомарно заменяем старый файл новым
 	if err := os.Rename(tmpFile, models.FileName); err != nil {
 		os.Remove(tmpFile)
 		return err
