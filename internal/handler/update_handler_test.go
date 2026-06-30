@@ -1,190 +1,167 @@
-package handler
+package handlers_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"os"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
+	handlers "practice/internal/handler"
+	models "practice/internal/model"
+	repository "practice/internal/repository"
 )
 
-// resetStorage очищает хранилище метрик для изоляции тестов
-func resetStorage() {
-	mu.Lock()
-	defer mu.Unlock()
-	storage = make(map[string]map[string]float64)
-}
-
-// withChiParams добавляет URL-параметры chi в контекст запроса
-func withChiParams(r *http.Request, params map[string]string) *http.Request {
-	rctx := chi.NewRouteContext()
-	for k, v := range params {
-		rctx.URLParams.Add(k, v)
+// setupTempDir создаёт временную директорию, переходит в неё и возвращает
+// функцию для восстановления исходной рабочей директории.
+func setupTempDir(t *testing.T) func() {
+	t.Helper()
+	tmpDir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
 	}
-	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	return func() {
+		if err := os.Chdir(orig); err != nil {
+			t.Errorf("failed to restore working dir: %v", err)
+		}
+	}
 }
 
-func TestUpdateHandler_Success(t *testing.T) {
-	resetStorage()
-
-	req, _ := http.NewRequest(http.MethodPost, "/update/gauge/cpu/3.14", nil)
-	req = withChiParams(req, map[string]string{
-		"metricType":  "gauge",
-		"metricName":  "cpu",
-		"metricValue": "3.14",
-	})
+// executeRequest выполняет запрос к UpdateHandler и возвращает рекордер.
+func executeRequest(method, target, contentType string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, target, nil)
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	rec := httptest.NewRecorder()
-
-	UpdateHandler(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
-	}
-
-	mu.RLock()
-	val := storage["gauge"]["cpu"]
-	mu.RUnlock()
-	if val != 3.14 {
-		t.Errorf("expected metric value 3.14, got %v", val)
-	}
+	handlers.UpdateHandler(rec, req)
+	return rec
 }
 
-func TestUpdateHandler_InvalidValue(t *testing.T) {
-	resetStorage()
+// ---------- Ошибки HTTP ----------
 
-	req, _ := http.NewRequest(http.MethodPost, "/update/gauge/cpu/abc", nil)
-	req = withChiParams(req, map[string]string{
-		"metricType":  "gauge",
-		"metricName":  "cpu",
-		"metricValue": "abc",
-	})
-	rec := httptest.NewRecorder()
+func TestUpdateHandler_MethodNotAllowed(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
 
-	UpdateHandler(rec, req)
-
+	rec := executeRequest(http.MethodGet, "/update/gauge/cpu/1.0", "text/plain")
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+	expectedBody := "Only POST requests are allowed!\n"
+	if rec.Body.String() != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
 	}
 }
 
-func TestValueHandler_ExistingMetric(t *testing.T) {
-	resetStorage()
+func TestUpdateHandler_WrongContentType(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
 
-	// предварительно записываем метрику
-	mu.Lock()
-	storage["gauge"] = map[string]float64{"memory": 1024.5}
-	mu.Unlock()
-
-	req, _ := http.NewRequest(http.MethodGet, "/value/gauge/memory", nil)
-	req = withChiParams(req, map[string]string{
-		"metricType": "gauge",
-		"metricName": "memory",
-	})
-	rec := httptest.NewRecorder()
-
-	ValueHandler(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	rec := executeRequest(http.MethodPost, "/update/gauge/cpu/1.0", "application/json")
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
 	}
-
-	contentType := rec.Header().Get("Content-Type")
-	if contentType != "text/plain" {
-		t.Errorf("expected Content-Type text/plain, got %q", contentType)
-	}
-
-	body := rec.Body.String()
-	if body != "1024.5" {
-		t.Errorf("expected body '1024.5', got %q", body)
+	expectedBody := "Only contentType text/plain\n"
+	if rec.Body.String() != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
 	}
 }
 
-func TestValueHandler_NonExistentType(t *testing.T) {
-	resetStorage()
+// ---------- Ошибки URL ----------
 
-	req, _ := http.NewRequest(http.MethodGet, "/value/gauge/missing", nil)
-	req = withChiParams(req, map[string]string{
-		"metricType": "gauge",
-		"metricName": "missing",
-	})
-	rec := httptest.NewRecorder()
+func TestUpdateHandler_EmptyPath(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
 
-	ValueHandler(rec, req)
-
+	// Пустой путь после /update/
+	rec := executeRequest(http.MethodPost, "/update/", "text/plain")
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("expected status %d, got %d", http.StatusNotFound, rec.Code)
+		t.Errorf("expected 404, got %d", rec.Code)
 	}
 }
 
-func TestValueHandler_NonExistentName(t *testing.T) {
-	resetStorage()
+func TestUpdateHandler_NoMeaningPart(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
 
-	// тип существует, но метрика с таким именем отсутствует
-	mu.Lock()
-	storage["counter"] = map[string]float64{"hits": 42}
-	mu.Unlock()
-
-	req, _ := http.NewRequest(http.MethodGet, "/value/counter/views", nil)
-	req = withChiParams(req, map[string]string{
-		"metricType": "counter",
-		"metricName": "views",
-	})
-	rec := httptest.NewRecorder()
-
-	ValueHandler(rec, req)
-
+	rec := executeRequest(http.MethodPost, "/update/gauge/cpu", "text/plain")
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("expected status %d, got %d", http.StatusNotFound, rec.Code)
+		t.Errorf("expected 404, got %d", rec.Code)
 	}
 }
 
-func TestIndexHandler_Empty(t *testing.T) {
-	resetStorage()
+func TestUpdateHandler_MeaningEmptyAfterTrim(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
 
-	req, _ := http.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-
-	IndexHandler(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
-	}
-
-	body := rec.Body.String()
-	if !strings.Contains(body, "<th>Name</th>") {
-		t.Error("HTML table header not found")
-	}
-	// проверяем, что строк данных нет (только заголовок)
-	if strings.Count(body, "<tr>") != 1 {
-		t.Error("expected only one table row (header), found more")
+	// Значение – три пробела, закодированные как %20
+	rec := executeRequest(http.MethodPost, "/update/gauge/cpu/%20%20%20", "text/plain")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
 	}
 }
 
-func TestIndexHandler_WithMetrics(t *testing.T) {
-	resetStorage()
+func TestUpdateHandler_InvalidMetricType(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
 
-	mu.Lock()
-	storage["gauge"] = map[string]float64{"cpu": 12.3}
-	storage["counter"] = map[string]float64{"requests": 100}
-	mu.Unlock()
+	rec := executeRequest(http.MethodPost, "/update/histogram/cpu/1", "text/plain")
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
 
-	req, _ := http.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
+func TestUpdateHandler_InvalidMetricValue(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
 
-	IndexHandler(rec, req)
+	// Gauge с нечисловым значением
+	rec := executeRequest(http.MethodPost, "/update/gauge/cpu/abc", "text/plain")
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
 
+// ---------- Успешные сценарии ----------
+
+func TestUpdateHandler_SuccessGauge(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
+
+	rec := executeRequest(http.MethodPost, "/update/gauge/temperature/36.6", "text/plain")
 	if rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		t.Errorf("expected 200, got %d", rec.Code)
 	}
 
-	body := rec.Body.String()
-	// проверяем наличие данных в таблице
-	if !strings.Contains(body, "gauge") || !strings.Contains(body, "cpu") || !strings.Contains(body, "12.3") {
-		t.Error("HTML does not contain expected gauge/cpu/12.3")
+	// Дополнительно проверим, что метрика сохранилась
+	// (опционально, для уверенности)
+	m, err := repository.FindMetric("temperature", int8(models.Gauge))
+	if err != nil {
+		t.Fatalf("unexpected error finding metric: %v", err)
 	}
-	if !strings.Contains(body, "counter") || !strings.Contains(body, "requests") || !strings.Contains(body, "100") {
-		t.Error("HTML does not contain expected counter/requests/100")
+	if m == nil || m.Value != 36.6 {
+		t.Errorf("metric not saved correctly, got %+v", m)
+	}
+}
+
+func TestUpdateHandler_SuccessCounter(t *testing.T) {
+	restore := setupTempDir(t)
+	defer restore()
+
+	rec := executeRequest(http.MethodPost, "/update/counter/requests/10", "text/plain")
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+
+	m, err := repository.FindMetric("requests", int8(models.Counter))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m == nil || m.Delta != 10 {
+		t.Errorf("expected delta 10, got %+v", m)
 	}
 }
