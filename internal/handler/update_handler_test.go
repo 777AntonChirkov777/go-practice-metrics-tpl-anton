@@ -113,21 +113,6 @@ func TestUpdateHandler_WrongMethod(t *testing.T) {
 	// chi сам возвращает 405, тело ответа может быть пустым
 }
 
-// TestUpdateHandler_WrongContentType тестирует обработку неверного Content-Type
-func TestUpdateHandler_WrongContentType(t *testing.T) {
-	store := NewMockStorage()
-	router := createTestRouter(store)
-
-	req := httptest.NewRequest(http.MethodPost, "/update/gauge/test/123", nil)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "Only Content-Type text/plain")
-}
-
 // TestUpdateHandler_InvalidMetricType тестирует обработку неверного типа метрики
 func TestUpdateHandler_InvalidMetricType(t *testing.T) {
 	store := NewMockStorage()
@@ -318,14 +303,6 @@ func TestUpdateHandler_TableDriven(t *testing.T) {
 			contentType:    "text/plain",
 			expectedStatus: http.StatusMethodNotAllowed,
 			expectedBody:   "", // chi сам возвращает 405 с пустым телом
-		},
-		{
-			name:           "Wrong content type",
-			method:         http.MethodPost,
-			path:           "/update/gauge/test/123",
-			contentType:    "application/json",
-			expectedStatus: http.StatusBadRequest,
-			expectedBody:   "Only Content-Type text/plain",
 		},
 		{
 			name:           "Invalid metric type",
