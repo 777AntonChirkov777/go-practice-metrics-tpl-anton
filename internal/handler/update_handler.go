@@ -1,61 +1,80 @@
-package handlers
+package handler
 
 import (
+	"fmt"
 	"net/http"
-	models "practice/internal/model"
-	services "practice/internal/service"
-	"strings"
+	"strconv"
+	"sync"
+
+	"github.com/go-chi/chi/v5"
 )
 
-func UpdateHandler(res http.ResponseWriter, req *http.Request) {
+var (
+	storage = make(map[string]map[string]float64)
+	mu      sync.RWMutex
+)
 
-	if req.Method != http.MethodPost {
-		http.Error(res, "Only POST requests are allowed!", http.StatusBadRequest)
+func UpdateHandler(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "metricType")
+	metricName := chi.URLParam(r, "metricName")
+	valueStr := chi.URLParam(r, "metricValue")
+
+	value, err := strconv.ParseFloat(valueStr, 64)
+	if err != nil {
+		http.Error(w, "invalid value", http.StatusBadRequest)
 		return
 	}
 
-	contentType := req.Header.Get("Content-Type")
-	if contentType != "text/plain" {
-		http.Error(res, "Only contentType text/plain", http.StatusBadRequest)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if storage[metricType] == nil {
+		storage[metricType] = make(map[string]float64)
+	}
+	storage[metricType][metricName] = value
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func ValueHandler(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "metricType")
+	metricName := chi.URLParam(r, "metricName")
+
+	mu.RLock()
+	defer mu.RUnlock()
+
+	typeMap, ok := storage[metricType]
+	if !ok {
+		http.NotFound(w, r)
 		return
 	}
 
-	path := strings.TrimPrefix(req.URL.Path, "/update/")
-	parts := strings.Split(path, "/")
-
-	if len(parts) == 0 {
-		http.Error(res, "Invalid URL format. Expected /update/<TYPE>/<NAME>/<MEANING>", http.StatusNotFound)
+	val, ok := typeMap[metricName]
+	if !ok {
+		http.NotFound(w, r)
 		return
 	}
 
-	if len(parts) < 1 || strings.TrimSpace(parts[0]) == "" {
-		http.Error(res, "Invalid URL format. Expected /update/<TYPE>/<NAME>/<MEANING>", http.StatusNotFound)
-		return
+	// Возвращаем значение в текстовом виде
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "%v", val)
+}
+
+func IndexHandler(w http.ResponseWriter, r *http.Request) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	fmt.Fprint(w, "<html><body><h1>Metrics</h1><table border='1'><tr><th>Type</th><th>Name</th><th>Value</th></tr>")
+
+	for mType, names := range storage {
+		for name, val := range names {
+			fmt.Fprintf(w, "<tr><td>%s</td><td>%s</td><td>%v</td></tr>", mType, name, val)
+		}
 	}
 
-	typeMetric := models.GetTypeMetric(parts[0])
-
-	if typeMetric == models.Unknown {
-		http.Error(res, "Invalid <TYPE> metric. Only <gauge>(float64) or <counter>(int64) values are supported.", http.StatusBadRequest)
-		return
-	}
-
-	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
-		http.Error(res, "Invalid URL format. Expected /update/<TYPE>/<NAME>/<MEANING>", http.StatusNotFound)
-		return
-	}
-
-	if len(parts) < 3 || strings.TrimSpace(parts[2]) == "" {
-		http.Error(res, "Invalid URL format. Expected /update/<TYPE>/<NAME>/<MEANING>", http.StatusNotFound)
-		return
-	}
-
-	if !models.IsParseMetricValue(typeMetric, parts[2]) {
-		http.Error(res, "Invalid <MEANING> metric. Only <gauge>(float64) or <counter>(int64) values are supported.", http.StatusBadRequest)
-		return
-	}
-
-	services.SaveMetric(typeMetric, parts[1], parts[2])
-
-	res.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "</table></body></html>")
 }

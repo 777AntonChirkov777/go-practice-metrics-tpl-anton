@@ -1,20 +1,30 @@
+// main.go
 package main
 
 import (
+	"log"
 	"net/http"
-	handlers "practice/internal/handler"
+	handler "practice/internal/handler"
 
-	"github.com/labstack/gommon/log"
+	"github.com/go-chi/chi/v5"
 )
 
 func main() {
-	log.Info("server start")
+	log.Println("server start")
 
-	mux := http.NewServeMux()
-	mux.HandleFunc(`/update/`, handlers.UpdateHandler)
+	r := chi.NewRouter()
 
-	log.Info("server occupied the port 8080")
-	err := http.ListenAndServe(`:8080`, mux)
+	// Маршрут обновления метрики (с параметрами в пути)
+	r.Post("/update/{metricType}/{metricName}/{metricValue}", handler.UpdateHandler)
+
+	// Получение значения метрики
+	r.Get("/value/{metricType}/{metricName}", handler.ValueHandler)
+
+	// Список всех метрик (HTML)
+	r.Get("/", handler.IndexHandler)
+
+	log.Println("server occupied the port 8080")
+	err := http.ListenAndServe(":8080", r)
 	if err != nil {
 		panic(err)
 	}
