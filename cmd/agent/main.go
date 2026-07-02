@@ -43,4 +43,5 @@ func main() {
 	fmt.Println("Shutting down agent...")
 	cancel()
 	time.Sleep(time.Second) // даём время на завершение горутин
+
 }
