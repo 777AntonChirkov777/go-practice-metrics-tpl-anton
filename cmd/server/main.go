@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
-	"strings"
-
 	"practice/internal/config"
 	handlers "practice/internal/handler"
 	"practice/internal/storage"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -30,15 +30,31 @@ func main() {
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)
 
-	addr := cfg.Address
-	if strings.HasPrefix(addr, "localhost:") {
-		addr = ":" + strings.TrimPrefix(addr, "localhost:")
+	_, port, err := net.SplitHostPort(cfg.Address)
+	if err != nil {
+		// Фоллбэк на случай, если адрес передан нестандартно
+		port = strings.TrimPrefix(cfg.Address, ":")
 	}
 
-	fmt.Printf("Server is running on %s\n", addr)
-
-	if err := http.ListenAndServe(addr, r); err != nil {
-		fmt.Fprintf(os.Stderr, "error server connection: %v\n", err)
+	l4, err := net.Listen("tcp4", "0.0.0.0:"+port)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error listen ipv4: %v\n", err)
 		os.Exit(1)
+	}
+
+	fmt.Printf("Server is running on :%s\n", port)
+
+	l6, err := net.Listen("tcp6", "[::]:"+port)
+	if err == nil {
+		// Если IPv6 доступен, запускаем IPv4 в фоне, а IPv6 блокирует main-горутину
+		go http.Serve(l4, r)
+		if err := http.Serve(l6, r); err != nil {
+			fmt.Fprintf(os.Stderr, "error server ipv6: %v\n", err)
+		}
+	} else {
+		// Если IPv6 не поддерживается ОС, просто слушаем IPv4 (блокируя main)
+		if err := http.Serve(l4, r); err != nil {
+			fmt.Fprintf(os.Stderr, "error server ipv4: %v\n", err)
+		}
 	}
 }
