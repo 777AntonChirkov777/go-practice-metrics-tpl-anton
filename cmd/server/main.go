@@ -36,25 +36,19 @@ func main() {
 		port = strings.TrimPrefix(cfg.Address, ":")
 	}
 
-	l4, err := net.Listen("tcp4", "0.0.0.0:"+port)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error listen ipv4: %v\n", err)
-		os.Exit(1)
-	}
+	fmt.Printf("Server is running on port %s\n", port)
 
-	fmt.Printf("Server is running on :%s\n", port)
-
-	l6, err := net.Listen("tcp6", "[::]:"+port)
-	if err == nil {
-		// Если IPv6 доступен, запускаем IPv4 в фоне, а IPv6 блокирует main-горутину
-		go http.Serve(l4, r)
-		if err := http.Serve(l6, r); err != nil {
-			fmt.Fprintf(os.Stderr, "error server ipv6: %v\n", err)
+	go func() {
+		if err := http.ListenAndServe("127.0.0.1:"+port, r); err != nil {
+			fmt.Fprintf(os.Stderr, "error ipv4 server: %v\n", err)
 		}
-	} else {
-		// Если IPv6 не поддерживается ОС, просто слушаем IPv4 (блокируя main)
-		if err := http.Serve(l4, r); err != nil {
-			fmt.Fprintf(os.Stderr, "error server ipv4: %v\n", err)
+	}()
+
+	if err := http.ListenAndServe("[::1]:"+port, r); err != nil {
+		fmt.Printf("IPv6 not available (%v), falling back to IPv4\n", err)
+		if err := http.ListenAndServe("127.0.0.1:"+port, r); err != nil {
+			fmt.Fprintf(os.Stderr, "error server connection: %v\n", err)
+			os.Exit(1)
 		}
 	}
 }
