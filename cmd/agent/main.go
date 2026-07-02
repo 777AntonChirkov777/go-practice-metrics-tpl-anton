@@ -26,9 +26,9 @@ func main() {
 	fmt.Printf("  интервал опроса:   %v\n", cfg.PollInterval)
 
 	agent := agent.NewAgent(
-		2*time.Second,
-		10*time.Second,
-		"http://localhost:8080",
+		cfg.PollInterval,
+		cfg.ReportInterval,
+		"http://"+cfg.ServerAddress,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"practice/internal/config"
 	handlers "practice/internal/handler"
 	"practice/internal/storage"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -28,9 +30,16 @@ func main() {
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)
 
+	_, port, err := net.SplitHostPort(cfg.Address)
+	if err != nil {
+		// Фоллбэк, если адрес передан без хоста (например, ":8080") или нестандартно.
+		port = strings.TrimPrefix(cfg.Address, ":")
+	}
+	listenAddr := ":" + port
+
 	fmt.Printf("Server is running on %s\n", cfg.Address)
 
-	if err := http.ListenAndServe(cfg.Address, r); err != nil {
+	if err := http.ListenAndServe(listenAddr, r); err != nil {
 		fmt.Fprintf(os.Stderr, "error server connection: %v\n", err)
 		os.Exit(1)
 	}
