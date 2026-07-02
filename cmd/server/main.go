@@ -1,19 +1,28 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"net"
 	"net/http"
-
+	"os"
+	"practice/internal/config"
 	handlers "practice/internal/handler"
 	"practice/internal/storage"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func main() {
-	log.Println("server start")
+	fmt.Println("server start")
 
-	store := storage.NewMemStorage() // загружает данные из файла при старте
+	cfg, err := config.ParseServerFlags(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	store := storage.NewMemStorage()
 	h := handlers.NewHandler(store)
 
 	r := chi.NewRouter()
@@ -21,8 +30,17 @@ func main() {
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)
 
-	log.Println("server occupied the port 8080")
-	if err := http.ListenAndServe(":8080", r); err != nil {
-		log.Fatal(err)
+	_, port, err := net.SplitHostPort(cfg.Address)
+	if err != nil {
+		// Фоллбэк, если адрес передан без хоста (например, ":8080") или нестандартно.
+		port = strings.TrimPrefix(cfg.Address, ":")
+	}
+	listenAddr := ":" + port
+
+	fmt.Printf("Server is running on %s\n", cfg.Address)
+
+	if err := http.ListenAndServe(listenAddr, r); err != nil {
+		fmt.Fprintf(os.Stderr, "error server connection: %v\n", err)
+		os.Exit(1)
 	}
 }
