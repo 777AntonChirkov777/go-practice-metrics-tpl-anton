@@ -3,32 +3,19 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	agent "practice/internal/agent"
-	"practice/internal/config"
 	"syscall"
 	"time"
 )
 
 func main() {
-
-	cfg, err := config.ParseAgentFlags(os.Args[1:])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Агент запущен:\n")
-	fmt.Printf("  адрес сервера: %s\n", cfg.ServerAddress)
-	fmt.Printf("  интервал отправки: %v\n", cfg.ReportInterval)
-	fmt.Printf("  интервал опроса:   %v\n", cfg.PollInterval)
-
 	agent := agent.NewAgent(
-		cfg.PollInterval,
-		cfg.ReportInterval,
-		"http://"+cfg.ServerAddress,
+		2*time.Second,
+		10*time.Second,
+		"http://localhost:8080",
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -40,8 +27,7 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
-	fmt.Println("Shutting down agent...")
+	log.Println("Shutting down agent...")
 	cancel()
 	time.Sleep(time.Second) // даём время на завершение горутин
-
 }
