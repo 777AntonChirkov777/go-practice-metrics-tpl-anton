@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"practice/internal/config"
 	handlers "practice/internal/handler"
@@ -13,7 +14,6 @@ import (
 )
 
 func main() {
-
 	fmt.Println("server start")
 
 	cfg, err := config.ParseServerFlags(os.Args[1:])
@@ -22,7 +22,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	store := storage.NewMemStorage() // загружает данные из файла при старте
+	store := storage.NewMemStorage()
 	h := handlers.NewHandler(store)
 
 	r := chi.NewRouter()
@@ -30,8 +30,15 @@ func main() {
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)
 
-	fmt.Printf("Server is running on %s\n", cfg.Address)
-	if err := http.ListenAndServe(cfg.Address, r); err != nil {
+	addr := cfg.Address
+	if strings.HasPrefix(addr, "localhost:") {
+		addr = ":" + strings.TrimPrefix(addr, "localhost:")
+	}
+
+	fmt.Printf("Server is running on %s\n", addr)
+
+	if err := http.ListenAndServe(addr, r); err != nil {
 		fmt.Fprintf(os.Stderr, "error server connection: %v\n", err)
+		os.Exit(1)
 	}
 }
