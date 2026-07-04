@@ -147,7 +147,7 @@ func (a *Agent) Start(ctx context.Context) {
 		for {
 			select {
 			case <-reportTicker.C:
-				a.CollectMetrics()
+				a.report()
 			case <-ctx.Done():
 				return
 			}
