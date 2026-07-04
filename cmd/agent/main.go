@@ -7,9 +7,8 @@ import (
 	"os"
 	"os/signal"
 	agent "practice/internal/agent"
-	"practice/internal/config"
+	config "practice/internal/config/flag"
 	"syscall"
-	"time"
 )
 
 func main() {
@@ -42,6 +41,6 @@ func main() {
 	<-sigCh
 	fmt.Println("Shutting down agent...")
 	cancel()
-	time.Sleep(time.Second) // даём время на завершение горутин
+	agent.Wait()
 
 }

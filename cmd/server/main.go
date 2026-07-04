@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"practice/internal/config"
+	config "practice/internal/config/flag"
 	handlers "practice/internal/handler"
 	"practice/internal/storage"
 	"strings"

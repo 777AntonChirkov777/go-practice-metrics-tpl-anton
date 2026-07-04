@@ -12,7 +12,7 @@ type ServerConfig struct {
 
 // ParseServerFlags обрабатывает аргументы командной строки для сервера.
 func ParseServerFlags(args []string) (*ServerConfig, error) {
-	fs := flag.NewFlagSet("server", flag.ExitOnError)
+	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
 	var cfg ServerConfig
 	fs.StringVar(&cfg.Address, "a", "localhost:8080", "address and port to run server")

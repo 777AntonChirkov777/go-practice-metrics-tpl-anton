@@ -22,6 +22,7 @@ type Agent struct {
 	gauges         map[string]float64
 	pollCount      int64
 	randomValue    float64
+	wg             sync.WaitGroup
 }
 
 // NewAgent создает новый экземпляр агента.
@@ -125,25 +126,29 @@ func (a *Agent) Start(ctx context.Context) {
 	pollTicker := time.NewTicker(a.pollInterval)
 	reportTicker := time.NewTicker(a.reportInterval)
 
+	a.wg.Add(2)
+
 	go func() {
+		defer a.wg.Done()
+		defer pollTicker.Stop()
 		for {
 			select {
 			case <-pollTicker.C:
 				a.CollectMetrics()
 			case <-ctx.Done():
-				pollTicker.Stop()
 				return
 			}
 		}
 	}()
 
 	go func() {
+		defer a.wg.Done()
+		defer reportTicker.Stop()
 		for {
 			select {
 			case <-reportTicker.C:
-				a.report()
+				a.CollectMetrics()
 			case <-ctx.Done():
-				reportTicker.Stop()
 				return
 			}
 		}
@@ -160,4 +165,8 @@ func (a *Agent) GetMetrics() (gauges map[string]float64, pollCount int64) {
 	}
 	pollCount = a.pollCount
 	return
+}
+
+func (a *Agent) Wait() {
+	a.wg.Wait()
 }
