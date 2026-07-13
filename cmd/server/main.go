@@ -5,7 +5,9 @@ import (
 	"net"
 	"net/http"
 	"os"
-	config "practice/internal/config/flag"
+
+	//configF "practice/internal/config/flag"
+	config "practice/internal/config"
 	handlers "practice/internal/handler"
 	"practice/internal/storage"
 	"strings"
@@ -16,7 +18,8 @@ import (
 func main() {
 	fmt.Println("server start")
 
-	cfg, err := config.ParseServerFlags(os.Args[1:])
+	cfg, err := config.GetServerConfig(os.Args[1:])
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error configuration: %v\n", err)
 		os.Exit(1)
