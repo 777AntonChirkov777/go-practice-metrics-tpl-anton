@@ -7,27 +7,31 @@ import (
 	"os"
 	"os/signal"
 	agent "practice/internal/agent"
-	config "practice/internal/config/flag"
+
+	//configF "practice/internal/config/flag"
+	config "practice/internal/config"
 	"syscall"
 )
 
 func main() {
 
-	cfg, err := config.ParseAgentFlags(os.Args[1:])
+	acfg, err := config.GetAgentConfig()
+
+	//cfg, err := configF.ParseAgentFlags(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("Агент запущен:\n")
-	fmt.Printf("  адрес сервера: %s\n", cfg.ServerAddress)
-	fmt.Printf("  интервал отправки: %v\n", cfg.ReportInterval)
-	fmt.Printf("  интервал опроса:   %v\n", cfg.PollInterval)
+	fmt.Printf("  адрес сервера: %s\n", acfg.Address)
+	fmt.Printf("  интервал отправки: %v\n", acfg.ReportInterval)
+	fmt.Printf("  интервал опроса:   %v\n", acfg.PollInterval)
 
 	agent := agent.NewAgent(
-		cfg.PollInterval,
-		cfg.ReportInterval,
-		"http://"+cfg.ServerAddress,
+		acfg.PollInterval,
+		acfg.ReportInterval,
+		"http://"+acfg.Address,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
