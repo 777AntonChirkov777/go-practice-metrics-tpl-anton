@@ -17,5 +17,11 @@ func GetServerConfigEnv() *ServerConfigEnv {
 		fmt.Printf("Причина: %s\n", err.Error())
 		return nil
 	}
+
+	if cfg.Address == "" {
+		fmt.Printf("Пустое поле Address\n")
+		return nil
+	}
+
 	return cfg
 }
