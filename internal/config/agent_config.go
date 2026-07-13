@@ -25,8 +25,8 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 
 	if evnCfg != nil {
 		cfg.Address = evnCfg.Address
-		cfg.PollInterval = evnCfg.PollInterval
-		cfg.ReportInterval = evnCfg.ReportInterval
+		cfg.PollInterval = time.Duration(evnCfg.PollInterval) * time.Second
+		cfg.ReportInterval = time.Duration(evnCfg.ReportInterval) * time.Second
 		return cfg, nil
 	}
 
