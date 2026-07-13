@@ -1,22 +1,43 @@
 package config
 
 import (
-	"fmt"
+	env "practice/internal/config/env"
+	flag "practice/internal/config/flag"
 	"time"
 
-	"github.com/caarlos0/env/v11"
+	"github.com/creasty/defaults"
 )
 
 type AgentConfig struct {
-	Address        string        `env:"ADDRESS" envDefault:"localhost:8080"`
-	ReportInterval time.Duration `env:"REPORT_INTERVAL" envDefault:"10s"`
-	PollInterval   time.Duration `env:"POLL_INTERVAL" envDefault:"1s"`
+	Address        string        `default:"localhost:8080"`
+	ReportInterval time.Duration `default:"30s"`
+	PollInterval   time.Duration `default:"5s"`
 }
 
-func GetAgentConfig() (*AgentConfig, error) {
+func GetAgentConfig(args []string) (*AgentConfig, error) {
 	cfg := &AgentConfig{}
-	if err := env.Parse(cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse env: %w", err)
+
+	if err := defaults.Set(cfg); err != nil {
+		return nil, err
 	}
+
+	evnCfg := env.GetAgentConfigEnv()
+
+	if evnCfg != nil {
+		cfg.Address = evnCfg.Address
+		cfg.PollInterval = evnCfg.PollInterval
+		cfg.ReportInterval = evnCfg.ReportInterval
+		return cfg, nil
+	}
+
+	flagCfg := flag.ParseAgentFlags(args)
+
+	if flagCfg != nil {
+		cfg.Address = flagCfg.Address
+		cfg.PollInterval = flagCfg.PollInterval
+		cfg.ReportInterval = flagCfg.ReportInterval
+		return cfg, nil
+	}
+
 	return cfg, nil
 }

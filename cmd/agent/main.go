@@ -15,9 +15,8 @@ import (
 
 func main() {
 
-	acfg, err := config.GetAgentConfig()
+	acfg, err := config.GetAgentConfig(os.Args[1:])
 
-	//cfg, err := configF.ParseAgentFlags(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
 		os.Exit(1)

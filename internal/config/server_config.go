@@ -1,19 +1,36 @@
 package config
 
 import (
-	"fmt"
+	env "practice/internal/config/env"
+	flag "practice/internal/config/flag"
 
-	"github.com/caarlos0/env/v11"
+	"github.com/creasty/defaults"
 )
 
 type ServerConfig struct {
-	Address string `env:"ADDRESS" envDefault:"localhost:8080"`
+	Address string `default:"localhost:8080"`
 }
 
-func GetServerConfig() (*ServerConfig, error) {
+func GetServerConfig(args []string) (*ServerConfig, error) {
 	cfg := &ServerConfig{}
-	if err := env.Parse(cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse env: %w", err)
+
+	if err := defaults.Set(cfg); err != nil {
+		return nil, err
 	}
+
+	evnCfg := env.GetServerConfigEnv()
+
+	if evnCfg != nil {
+		cfg.Address = evnCfg.Address
+		return cfg, nil
+	}
+
+	flagCfg := flag.ParseServerFlags(args)
+
+	if flagCfg != nil {
+		cfg.Address = flagCfg.Address
+		return cfg, nil
+	}
+
 	return cfg, nil
 }

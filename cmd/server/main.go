@@ -18,9 +18,8 @@ import (
 func main() {
 	fmt.Println("server start")
 
-	cfg, err := config.GetServerConfig()
+	cfg, err := config.GetServerConfig(os.Args[1:])
 
-	//cfg, err := configF.ParseServerFlags(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error configuration: %v\n", err)
 		os.Exit(1)
