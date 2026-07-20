@@ -39,6 +39,17 @@ func main() {
 	// "all middlewares must be defined before routes on a mux".
 	r.Use(logger.RequestLogger)
 	r.Get("/", h.ListHandler)
+
+	// JSON-эндпоинты инкремента 7. Регистрируем обе формы, со слэшем и без:
+	// для chi "/update" и "/update/" — РАЗНЫЕ маршруты, редиректа между ними нет.
+	// Конфликта с "/update/{type}/{name}/{value}" не возникает: статический узел
+	// и param-потомок сосуществуют в дереве chi.
+	r.Post("/update", h.UpdateJSONHandler)
+	r.Post("/update/", h.UpdateJSONHandler)
+	r.Post("/value", h.ValueJSONHandler)
+	r.Post("/value/", h.ValueJSONHandler)
+
+	// Текстовые эндпоинты инкрементов 1-5 остаются нетронутыми.
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)
 

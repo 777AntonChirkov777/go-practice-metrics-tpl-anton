@@ -70,13 +70,20 @@ func (s *MemStorage) Get(mtype model.MetricType, name string) (*model.Metric, bo
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	// Возвращаем копию: иначе наружу уходит указатель на объект в map, который
+	// параллельный Save мутирует (existing.Delta += ...), а вызывающий читает
+	// его уже после RUnlock. Ловится go test -race.
 	switch mtype {
 	case model.Gauge:
-		m, ok := s.gauges[name]
-		return m, ok
+		if m, ok := s.gauges[name]; ok {
+			cp := *m
+			return &cp, true
+		}
 	case model.Counter:
-		m, ok := s.counter[name]
-		return m, ok
+		if m, ok := s.counter[name]; ok {
+			cp := *m
+			return &cp, true
+		}
 	}
 	return nil, false
 }
@@ -85,12 +92,15 @@ func (s *MemStorage) GetAll() []*model.Metric {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	// Копии по той же причине, что и в Get.
 	out := make([]*model.Metric, 0, len(s.gauges)+len(s.counter))
 	for _, m := range s.gauges {
-		out = append(out, m)
+		cp := *m
+		out = append(out, &cp)
 	}
 	for _, m := range s.counter {
-		out = append(out, m)
+		cp := *m
+		out = append(out, &cp)
 	}
 	return out
 }

@@ -2,13 +2,15 @@
 package agent
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"encoding/json"
+	"io"
 	"math/rand"
 	"net/http"
 	"practice/internal/logger"
+	models "practice/internal/model"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
 
@@ -95,33 +97,51 @@ func (a *Agent) report() {
 	a.mu.Unlock()
 
 	for name, val := range gaugesCopy {
-		url := fmt.Sprintf("%s/update/gauge/%s/%s",
-			a.serverURL, name, strconv.FormatFloat(val, 'g', -1, 64))
-		a.sendMetric(url)
+		a.sendMetric(models.NewGaugeDTO(name, val))
 	}
 
-	counterURL := fmt.Sprintf("%s/update/counter/PollCount/%d",
-		a.serverURL, pollCount)
-	a.sendMetric(counterURL)
+	a.sendMetric(models.NewCounterDTO("PollCount", pollCount))
 }
 
-// sendMetric выполняет POST-запрос к серверу с заголовком Content-Type: text/plain.
-func (a *Agent) sendMetric(url string) {
-	req, err := http.NewRequest(http.MethodPost, url, nil)
+// sendMetric отправляет одну метрику на POST /update/ телом-JSON
+// с заголовком Content-Type: application/json.
+func (a *Agent) sendMetric(m models.Metrics) {
+	// Слэш на конце — форма, которую использует сервер и автотесты; сервер
+	// принимает обе.
+	url := a.serverURL + "/update/"
+
+	body, err := json.Marshal(m)
+	if err != nil {
+		logger.Log.Info("marshal metric failed",
+			zap.String("id", m.ID), zap.Error(err))
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		// zap.Error — это поле; уровень сообщения остаётся Info.
 		logger.Log.Info("build metric request failed",
 			zap.String("url", url), zap.Error(err))
 		return
 	}
-	req.Header.Set("Content-Type", "text/plain")
+	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := a.client.Do(req)
 	if err != nil {
 		logger.Log.Info("send metric failed",
 			zap.String("url", url), zap.Error(err))
 		return
 	}
+	// Тело обязательно дочитать, а не только закрыть: раньше ответы были
+	// пустые, теперь /update/ возвращает JSON, и непрочитанный хвост не даёт
+	// вернуть соединение в keep-alive пул — новый сокет на каждую метрику.
+	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Log.Info("unexpected response status",
+			zap.String("id", m.ID), zap.Int("status", resp.StatusCode))
+	}
 }
 
 // Start запускает периодический сбор и отправку метрик.
