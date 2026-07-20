@@ -54,3 +54,20 @@ func ParseGauge(typeMetric MetricType, valueStr string) (float64, error) {
 func ParseCounter(typeMetric MetricType, valueStr string) (int64, error) {
 	return strconv.ParseInt(valueStr, 10, 64)
 }
+
+// WireName — имя типа на проводе: строго нижний регистр.
+//
+// String() отдаёт "Gauge"/"Counter" и завязан на metric_type_test.go, поэтому
+// для JSON нужен отдельный метод. Он к тому же не паникует на мусорном
+// значении: String() индексирует массив из трёх элементов, MetricType(7) там
+// уронил бы процесс.
+func (m MetricType) WireName() string {
+	switch m {
+	case Gauge:
+		return "gauge"
+	case Counter:
+		return "counter"
+	default:
+		return "unknown"
+	}
+}

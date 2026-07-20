@@ -23,3 +23,7 @@ vendor/
 # IDEs directories
 .idea
 .vscode
+
+# Runtime persistence artifact
+metricData.jsonl
+metricData.jsonl.tmp

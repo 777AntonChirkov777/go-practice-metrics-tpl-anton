@@ -2,9 +2,10 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	models "practice/internal/model"
 	"sync"
 	"testing"
 	"time"
@@ -46,22 +47,31 @@ func TestCollectMetrics(t *testing.T) {
 
 func TestReport(t *testing.T) {
 	var mu sync.Mutex
-	var receivedPaths []string
+	var received []models.Metrics
 
-	// Тестовый HTTP-сервер, имитирующий сервер сбора метрик.
+	// Тестовый HTTP-сервер, имитирующий сервер сбора метрик (JSON API).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		if r.Method != http.MethodPost || r.URL.Path != "/update/" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		if ct := r.Header.Get("Content-Type"); ct != "text/plain" {
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var m models.Metrics
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		mu.Lock()
-		receivedPaths = append(receivedPaths, r.URL.Path)
+		received = append(received, m)
 		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(m)
 	}))
 	defer srv.Close()
 
@@ -76,27 +86,43 @@ func TestReport(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) // ожидаем завершения горутин
 
 	mu.Lock()
-	paths := make([]string, len(receivedPaths))
-	copy(paths, receivedPaths)
+	got := make([]models.Metrics, len(received))
+	copy(got, received)
 	mu.Unlock()
 
-	if len(paths) == 0 {
+	if len(got) == 0 {
 		t.Fatal("no metrics were reported")
 	}
 
-	// Анализируем полученные пути на наличие всех gauge и counter.
+	// Ровно одно из delta/value должно быть заполнено — ради этого DTO
+	// использует указатели.
 	hasGauge := map[string]bool{}
 	hasCounter := false
-	for _, p := range paths {
-		if strings.HasPrefix(p, "/update/gauge/") {
-			parts := strings.SplitN(p, "/", 5)
-			if len(parts) == 5 {
-				hasGauge[parts[3]] = true
+	for _, m := range got {
+		switch m.MType {
+		case "gauge":
+			if m.Value == nil {
+				t.Errorf("gauge %s reported without value", m.ID)
+				continue
 			}
-		} else if strings.HasPrefix(p, "/update/counter/") {
-			if strings.Contains(p, "PollCount") {
-				hasCounter = true
+			if m.Delta != nil {
+				t.Errorf("gauge %s reported with delta", m.ID)
 			}
+			hasGauge[m.ID] = true
+		case "counter":
+			if m.ID != "PollCount" {
+				continue
+			}
+			if m.Delta == nil {
+				t.Error("PollCount reported without delta")
+				continue
+			}
+			if *m.Delta < 1 {
+				t.Errorf("PollCount delta = %d, want >= 1", *m.Delta)
+			}
+			hasCounter = true
+		default:
+			t.Errorf("unexpected metric type %q", m.MType)
 		}
 	}
 
