@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"practice/internal/logger"
 	"runtime"
 	"strconv"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // Agent отвечает за сбор метрик и их отправку на сервер.
@@ -106,12 +109,16 @@ func (a *Agent) report() {
 func (a *Agent) sendMetric(url string) {
 	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
-		// В реальном приложении здесь должно быть логирование.
+		// zap.Error — это поле; уровень сообщения остаётся Info.
+		logger.Log.Info("build metric request failed",
+			zap.String("url", url), zap.Error(err))
 		return
 	}
 	req.Header.Set("Content-Type", "text/plain")
 	resp, err := a.client.Do(req)
 	if err != nil {
+		logger.Log.Info("send metric failed",
+			zap.String("url", url), zap.Error(err))
 		return
 	}
 	resp.Body.Close()

@@ -9,15 +9,15 @@ import (
 	//configF "practice/internal/config/flag"
 	config "practice/internal/config"
 	handlers "practice/internal/handler"
+	"practice/internal/logger"
 	"practice/internal/storage"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 func main() {
-	fmt.Println("server start")
-
 	cfg, err := config.GetServerConfig(os.Args[1:])
 
 	if err != nil {
@@ -25,10 +25,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Уровень зафиксирован: по заданию все сообщения логгера — Info.
+	if err := logger.Initialize("info"); err != nil {
+		fmt.Fprintf(os.Stderr, "error logger initialization: %v\n", err)
+		os.Exit(1)
+	}
+
 	store := storage.NewMemStorage()
 	h := handlers.NewHandler(store)
 
 	r := chi.NewRouter()
+	// Use обязан идти до регистрации маршрутов, иначе chi паникует:
+	// "all middlewares must be defined before routes on a mux".
+	r.Use(logger.RequestLogger)
 	r.Get("/", h.ListHandler)
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)
@@ -40,10 +49,12 @@ func main() {
 	}
 	listenAddr := ":" + port
 
-	fmt.Printf("Server is running on %s\n", cfg.Address)
+	logger.Log.Info("server started", zap.String("address", cfg.Address))
 
 	if err := http.ListenAndServe(listenAddr, r); err != nil {
-		fmt.Fprintf(os.Stderr, "error server connection: %v\n", err)
+		// zap.Error — это поле, уровень сообщения остаётся Info.
+		logger.Log.Info("server stopped", zap.Error(err))
+		logger.Sync()
 		os.Exit(1)
 	}
 }

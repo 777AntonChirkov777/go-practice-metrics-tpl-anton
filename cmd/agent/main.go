@@ -10,7 +10,10 @@ import (
 
 	//configF "practice/internal/config/flag"
 	config "practice/internal/config"
+	"practice/internal/logger"
 	"syscall"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -22,10 +25,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Агент запущен:\n")
-	fmt.Printf("  адрес сервера: %s\n", acfg.Address)
-	fmt.Printf("  интервал отправки: %v\n", acfg.ReportInterval)
-	fmt.Printf("  интервал опроса:   %v\n", acfg.PollInterval)
+	// Уровень зафиксирован: по заданию все сообщения логгера — Info.
+	if err := logger.Initialize("info"); err != nil {
+		fmt.Fprintf(os.Stderr, "ошибка инициализации логгера: %v\n", err)
+		os.Exit(1)
+	}
+
+	logger.Log.Info("agent started",
+		zap.String("server_address", acfg.Address),
+		zap.Duration("report_interval", acfg.ReportInterval),
+		zap.Duration("poll_interval", acfg.PollInterval),
+	)
 
 	agent := agent.NewAgent(
 		acfg.PollInterval,
@@ -42,8 +52,9 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
-	fmt.Println("Shutting down agent...")
+	logger.Log.Info("agent shutting down")
 	cancel()
 	agent.Wait()
+	logger.Sync()
 
 }
