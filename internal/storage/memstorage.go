@@ -70,9 +70,6 @@ func (s *MemStorage) Get(mtype model.MetricType, name string) (*model.Metric, bo
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Возвращаем копию: иначе наружу уходит указатель на объект в map, который
-	// параллельный Save мутирует (existing.Delta += ...), а вызывающий читает
-	// его уже после RUnlock. Ловится go test -race.
 	switch mtype {
 	case model.Gauge:
 		if m, ok := s.gauges[name]; ok {

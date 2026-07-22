@@ -9,12 +9,6 @@ var (
 	ErrDeltaRequired = errors.New("delta is required for counter")
 )
 
-// Metrics — формат обмена по HTTP (инкремент 7). Форма зафиксирована заданием
-// дословно и намеренно отличается от внутренней Metric.
-//
-// Delta и Value — указатели, потому что omitempty на обычном поле выкидывает
-// любое нулевое значение: легитимные Lookups=0, NumForcedGC=0 уехали бы без
-// ключа "value", а получатель обязан видеть ровно одно из delta/value.
 type Metrics struct {
 	ID    string   `json:"id"`
 	MType string   `json:"type"`
@@ -25,8 +19,6 @@ type Metrics struct {
 // Type разбирает поле MType (GetTypeMetric регистронезависим).
 func (w Metrics) Type() MetricType { return GetTypeMetric(w.MType) }
 
-// ToDomain конвертирует тело запроса во внутреннюю модель.
-// Возвращает ошибку, а не панику: невалидное тело — это 400, а не 500.
 func (w Metrics) ToDomain() (*Metric, error) {
 	switch w.Type() {
 	case Gauge:

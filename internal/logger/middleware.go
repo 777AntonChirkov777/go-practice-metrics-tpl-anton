@@ -7,12 +7,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// RequestLogger логирует каждый HTTP-запрос двумя строками уровня Info:
-// "request"  — uri, method, duration;
-// "response" — status, size.
-//
-// Сигнатура func(http.Handler) http.Handler совместима с (*chi.Mux).Use
-// и с любым другим роутером на базе net/http.
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

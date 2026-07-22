@@ -20,9 +20,5 @@ func GetAgentConfigEnv() *AgentConfigEnv {
 		return nil
 	}
 
-	if cfg.Address == "" || cfg.ReportInterval == 0 || cfg.PollInterval == 0 {
-		return nil
-	}
-
 	return cfg
 }

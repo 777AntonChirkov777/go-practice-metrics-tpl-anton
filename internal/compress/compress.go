@@ -1,10 +1,3 @@
-// Package compress содержит HTTP-middleware для прозрачной поддержки gzip:
-//   - распаковка входящего тела запроса при Content-Encoding: gzip;
-//   - сжатие ответа для клиента с Accept-Encoding: gzip, но только для
-//     контента типов application/json и text/html (по заданию инкремента 8).
-//
-// Хендлеры при этом не знают про сжатие: читают обычный поток из r.Body
-// и пишут обычный ответ в http.ResponseWriter.
 package compress
 
 import (
@@ -14,11 +7,6 @@ import (
 	"strings"
 )
 
-// isCompressible решает, сжимать ли ответ данного Content-Type.
-//
-// Content-Type часто идёт с параметрами ("text/html; charset=utf-8"),
-// поэтому сравниваем только media type — без параметров и регистра.
-// text/plain (его ставит http.Error) и всё прочее уходит клиенту как есть.
 func isCompressible(contentType string) bool {
 	if i := strings.IndexByte(contentType, ';'); i >= 0 {
 		contentType = contentType[:i]
@@ -41,8 +29,6 @@ func hasGzipBody(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Content-Encoding"), "gzip")
 }
 
-// Middleware добавляет прозрачную поддержку gzip. Совместим с (*chi.Mux).Use
-// и с любым роутером на базе net/http.
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Входящее сжатое тело: подменяем r.Body распакованным потоком.

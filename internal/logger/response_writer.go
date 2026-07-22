@@ -37,10 +37,6 @@ func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Unwrap делает обёртку прозрачной для http.ResponseController (Go 1.20+):
-// Flush/Hijack/SetWriteDeadline продолжают работать сквозь неё.
-// Явный Flush() здесь не объявлен намеренно: иначе проверка w.(http.Flusher)
-// проходила бы даже там, где нижний writer флашиться не умеет.
 func (r *loggingResponseWriter) Unwrap() http.ResponseWriter {
 	return r.ResponseWriter
 }
