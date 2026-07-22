@@ -7,6 +7,7 @@ import (
 	"os"
 
 	//configF "practice/internal/config/flag"
+	"practice/internal/compress"
 	config "practice/internal/config"
 	handlers "practice/internal/handler"
 	"practice/internal/logger"
@@ -35,15 +36,11 @@ func main() {
 	h := handlers.NewHandler(store)
 
 	r := chi.NewRouter()
-	// Use обязан идти до регистрации маршрутов, иначе chi паникует:
-	// "all middlewares must be defined before routes on a mux".
+
 	r.Use(logger.RequestLogger)
+	r.Use(compress.Middleware)
 	r.Get("/", h.ListHandler)
 
-	// JSON-эндпоинты инкремента 7. Регистрируем обе формы, со слэшем и без:
-	// для chi "/update" и "/update/" — РАЗНЫЕ маршруты, редиректа между ними нет.
-	// Конфликта с "/update/{type}/{name}/{value}" не возникает: статический узел
-	// и param-потомок сосуществуют в дереве chi.
 	r.Post("/update", h.UpdateJSONHandler)
 	r.Post("/update/", h.UpdateJSONHandler)
 	r.Post("/value", h.ValueJSONHandler)

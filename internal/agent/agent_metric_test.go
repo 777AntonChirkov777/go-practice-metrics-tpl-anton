@@ -1,8 +1,9 @@
 package agent
 
 import (
-	"context"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	models "practice/internal/model"
@@ -45,6 +46,57 @@ func TestCollectMetrics(t *testing.T) {
 	}
 }
 
+// TestSendMetricGzipsBody проверяет, что одиночная отправка уходит с
+// Content-Encoding: gzip и корректно распаковывается на стороне сервера.
+func TestSendMetricGzipsBody(t *testing.T) {
+	// Хендлер httptest.Server выполняется в отдельной горутине; общие
+	// переменные защищаем мьютексом, чтобы тест был чист под go test -race.
+	var mu sync.Mutex
+	var got models.Metrics
+	var gotEncoding string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		enc := r.Header.Get("Content-Encoding")
+
+		zr, err := gzip.NewReader(r.Body)
+		if err != nil {
+			t.Errorf("body is not gzip: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		raw, _ := io.ReadAll(zr)
+		var m models.Metrics
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Errorf("decode: %v", err)
+		}
+		mu.Lock()
+		gotEncoding = enc
+		got = m
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(raw)
+	}))
+	defer srv.Close()
+
+	// sendMetric синхронен: после его возврата хендлер уже отработал.
+	a := NewAgent(time.Second, time.Second, srv.URL)
+	a.sendMetric(models.NewGaugeDTO("Alloc", 123.5))
+
+	mu.Lock()
+	defer mu.Unlock()
+	if gotEncoding != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want gzip", gotEncoding)
+	}
+	if got.ID != "Alloc" || got.MType != "gauge" {
+		t.Fatalf("decoded metric = %+v, want Alloc/gauge", got)
+	}
+	if got.Value == nil || *got.Value != 123.5 {
+		t.Fatalf("decoded value = %v, want 123.5", got.Value)
+	}
+}
+
 func TestReport(t *testing.T) {
 	var mu sync.Mutex
 	var received []models.Metrics
@@ -52,16 +104,33 @@ func TestReport(t *testing.T) {
 	// Тестовый HTTP-сервер, имитирующий сервер сбора метрик (JSON API).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/update/" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", ct)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// Агент обязан слать тело сжатым.
+		if enc := r.Header.Get("Content-Encoding"); enc != "gzip" {
+			t.Errorf("Content-Encoding = %q, want gzip", enc)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
+		body, err := gzip.NewReader(r.Body)
+		if err != nil {
+			t.Errorf("body is not gzip: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer body.Close()
+
 		var m models.Metrics
-		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		if err := json.NewDecoder(body).Decode(&m); err != nil {
+			t.Errorf("decode metric: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -75,15 +144,9 @@ func TestReport(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Агент с маленькими интервалами для быстрого теста.
-	agent := NewAgent(10*time.Millisecond, 20*time.Millisecond, srv.URL)
-	ctx, cancel := context.WithCancel(context.Background())
-	agent.Start(ctx)
-
-	// Даём отработать нескольким циклам отправки.
-	time.Sleep(80 * time.Millisecond)
-	cancel()
-	time.Sleep(10 * time.Millisecond) // ожидаем завершения горутин
+	agent := NewAgent(time.Second, time.Second, srv.URL)
+	agent.CollectMetrics()
+	agent.report()
 
 	mu.Lock()
 	got := make([]models.Metrics, len(received))

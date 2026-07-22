@@ -3,6 +3,7 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -103,8 +104,27 @@ func (a *Agent) report() {
 	a.sendMetric(models.NewCounterDTO("PollCount", pollCount))
 }
 
-// sendMetric отправляет одну метрику на POST /update/ телом-JSON
-// с заголовком Content-Type: application/json.
+// gzipJSON сжимает тело в gzip. Сжимаем в буфер целиком (тело одной метрики
+// крохотное), а не потоком: так проще выставить корректный Content-Length
+// и переиспользовать *bytes.Reader при возможных ретраях.
+func gzipJSON(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write(data); err != nil {
+		zw.Close()
+		return nil, err
+	}
+	// Close обязателен ДО чтения buf: он дописывает контрольную сумму и хвост,
+	// без него gzip.NewReader на сервере вернёт unexpected EOF.
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// sendMetric отправляет одну метрику на POST /update/ телом-JSON, сжатым gzip
+// (Content-Encoding: gzip). Accept-Encoding агент не ставит вручную:
+// http.Transport сам добавляет его и прозрачно распаковывает ответ сервера.
 func (a *Agent) sendMetric(m models.Metrics) {
 	// Слэш на конце — форма, которую использует сервер и автотесты; сервер
 	// принимает обе.
@@ -117,6 +137,13 @@ func (a *Agent) sendMetric(m models.Metrics) {
 		return
 	}
 
+	body, err = gzipJSON(body)
+	if err != nil {
+		logger.Log.Info("gzip metric failed",
+			zap.String("id", m.ID), zap.Error(err))
+		return
+	}
+
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		// zap.Error — это поле; уровень сообщения остаётся Info.
@@ -124,7 +151,10 @@ func (a *Agent) sendMetric(m models.Metrics) {
 			zap.String("url", url), zap.Error(err))
 		return
 	}
+	// Content-Type описывает распакованное тело, Content-Encoding — как оно
+	// упаковано на проводе. Оба заголовка обязательны.
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
 
 	resp, err := a.client.Do(req)
 	if err != nil {

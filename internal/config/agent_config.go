@@ -21,22 +21,22 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 		return nil, err
 	}
 
-	evnCfg := env.GetAgentConfigEnv()
-
-	if evnCfg != nil {
-		cfg.Address = evnCfg.Address
-		cfg.PollInterval = time.Duration(evnCfg.PollInterval) * time.Second
-		cfg.ReportInterval = time.Duration(evnCfg.ReportInterval) * time.Second
-		return cfg, nil
-	}
-
-	flagCfg := flag.ParseAgentFlags(args)
-
-	if flagCfg != nil {
+	if flagCfg := flag.ParseAgentFlags(args); flagCfg != nil {
 		cfg.Address = flagCfg.Address
 		cfg.PollInterval = flagCfg.PollInterval
 		cfg.ReportInterval = flagCfg.ReportInterval
-		return cfg, nil
+	}
+
+	if evnCfg := env.GetAgentConfigEnv(); evnCfg != nil {
+		if evnCfg.Address != "" {
+			cfg.Address = evnCfg.Address
+		}
+		if evnCfg.ReportInterval != 0 {
+			cfg.ReportInterval = time.Duration(evnCfg.ReportInterval) * time.Second
+		}
+		if evnCfg.PollInterval != 0 {
+			cfg.PollInterval = time.Duration(evnCfg.PollInterval) * time.Second
+		}
 	}
 
 	return cfg, nil

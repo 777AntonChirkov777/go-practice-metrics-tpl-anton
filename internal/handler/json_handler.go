@@ -12,11 +12,6 @@ const (
 	maxBodyBytes    = 1 << 20 // 1 MiB — тело одной метрики никогда не больше
 )
 
-// decodeMetrics читает ровно один JSON-объект из тела запроса.
-//
-// json.Decoder, а не Unmarshal: не тянем тело целиком в память, и в инкременте 8
-// тело будет обёрнуто в gzip.Reader — это поток.
-// DisallowUnknownFields не включаем: в инкременте 14 придёт поле "hash".
 func decodeMetrics(res http.ResponseWriter, req *http.Request) (model.Metrics, bool) {
 	req.Body = http.MaxBytesReader(res, req.Body, maxBodyBytes)
 
@@ -37,12 +32,6 @@ func decodeMetrics(res http.ResponseWriter, req *http.Request) (model.Metrics, b
 	return in, true
 }
 
-// writeJSON — единственная точка записи успешного JSON-ответа.
-//
-// Инварианты:
-//  1. Header().Set строго ДО WriteHeader — после WriteHeader вызов Set() no-op.
-//  2. Маршалим в буфер ДО WriteHeader: Encode(res) после WriteHeader(200) при
-//     ошибке оставил бы клиенту 200 с обрезанным телом.
 func writeJSON(res http.ResponseWriter, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
