@@ -1,27 +1,20 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/caarlos0/env/v11"
 )
 
 type ServerConfigEnv struct {
-	Address string `env:"ADDRESS"`
+	Address         *string `env:"ADDRESS"`
+	StoreInterval   *int    `env:"STORE_INTERVAL"`
+	FileStoragePath *string `env:"FILE_STORAGE_PATH"`
+	Restore         *bool   `env:"RESTORE"`
 }
 
-func GetServerConfigEnv() *ServerConfigEnv {
+func GetServerConfigEnv() (*ServerConfigEnv, error) {
 	cfg := &ServerConfigEnv{}
 	if err := env.Parse(cfg); err != nil {
-		fmt.Printf("Не получилось спарсить конфиг из переменных окружения\n")
-		fmt.Printf("Причина: %s\n", err.Error())
-		return nil
+		return nil, err
 	}
-
-	if cfg.Address == "" {
-		fmt.Printf("Пустое поле Address\n")
-		return nil
-	}
-
-	return cfg
+	return cfg, nil
 }

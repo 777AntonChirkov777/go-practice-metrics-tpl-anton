@@ -5,31 +5,29 @@ import (
 	"fmt"
 )
 
-// ServerConfigFlag содержит настройки HTTP-сервера.
 type ServerConfigFlag struct {
-	Address string
+	Address         string
+	StoreInterval   int
+	FileStoragePath string
+	Restore         bool
 }
 
-// ParseServerFlags обрабатывает аргументы командной строки для сервера.
-func ParseServerFlags(args []string) *ServerConfigFlag {
+func ParseServerFlags(args []string) (*ServerConfigFlag, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
 	var cfg ServerConfigFlag
 	fs.StringVar(&cfg.Address, "a", "localhost:8080", "address and port to run server")
+	fs.IntVar(&cfg.StoreInterval, "i", 300, "интервал записи метрик на диск в секундах (0 — синхронно)")
+	fs.StringVar(&cfg.FileStoragePath, "f", "metrics-db.json", "путь до файла, куда сохраняются метрики")
+	fs.BoolVar(&cfg.Restore, "r", true, "загружать ли сохранённые метрики при старте")
 
-	// Parse автоматически упадет с ошибкой, если встретит неизвестный флаг
 	if err := fs.Parse(args); err != nil {
-		fmt.Printf("Не получилось спарсить конфиг из флагов\n")
-		fmt.Printf("Причина: %s\n", err.Error())
-		return nil
+		return nil, fmt.Errorf("не удалось разобрать флаги: %w", err)
 	}
 
-	// Проверка на лишние позиционные аргументы (если требуется по условию)
 	if len(fs.Args()) > 0 {
-		fmt.Printf("Не получилось спарсить конфиг из флагов\n")
-		fmt.Printf("Причина: unknown positional arguments: %v", fs.Args())
-		return nil
+		return nil, fmt.Errorf("неизвестные позиционные аргументы: %v", fs.Args())
 	}
 
-	return &cfg
+	return &cfg, nil
 }
