@@ -24,17 +24,23 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := config.GetServerConfig(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error configuration: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error configuration: %w", err)
 	}
 
 	// Уровень зафиксирован: по заданию все сообщения логгера — Info.
 	if err := logger.Initialize("info"); err != nil {
-		fmt.Fprintf(os.Stderr, "error logger initialization: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error logger initialization: %w", err)
 	}
+	defer logger.Sync()
 
 	store := storage.NewMemStorage()
 	fs := filestore.New(cfg.FileStoragePath)
@@ -103,35 +109,32 @@ func main() {
 
 	logger.Log.Info("server started", zap.String("address", cfg.Address))
 
+	var runErr error
 	select {
 	case err := <-errCh:
+		runErr = err
 		logger.Log.Info("server stopped", zap.Error(err))
-		// Пытаемся сохранить накопленное перед аварийным выходом.
-		_ = fs.Save(store.GetAll())
-		logger.Sync()
-		os.Exit(1)
 	case <-ctx.Done():
 		// Получен сигнал остановки — переходим к штатному завершению.
 	}
 
-	// Штатное завершение: закрываем HTTP-сервер и сохраняем финальный снимок.
+	stop()
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Log.Info("graceful shutdown error", zap.Error(err))
 	}
 
-	if err := fs.Save(store.GetAll()); err != nil {
+	if err := fs.SaveFrom(store); err != nil {
 		logger.Log.Info("final dump failed", zap.Error(err))
 	} else {
 		logger.Log.Info("metrics saved on shutdown", zap.String("file", cfg.FileStoragePath))
 	}
 
-	logger.Sync()
+	return runErr
 }
 
-// periodicSave раз в interval сбрасывает текущий снимок метрик на диск, пока
-// не будет отменён контекст.
 func periodicSave(ctx context.Context, fs *filestore.FileStore, store *storage.MemStorage, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -141,7 +144,7 @@ func periodicSave(ctx context.Context, fs *filestore.FileStore, store *storage.M
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := fs.Save(store.GetAll()); err != nil {
+			if err := fs.SaveFrom(store); err != nil {
 				logger.Log.Info("periodic dump failed", zap.Error(err))
 			}
 		}

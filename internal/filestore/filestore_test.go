@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	model "practice/internal/model"
+	"practice/internal/storage"
 )
 
 func tmpPath(t *testing.T) string {
@@ -24,7 +27,7 @@ func TestSave_FileFormat(t *testing.T) {
 		model.NewGaugeMetric("LastGC", 1257894000000000000),
 		model.NewCountMetric("NumGC", 42),
 	}
-	if err := fs.Save(metrics); err != nil {
+	if err := fs.save(metrics); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
 
@@ -75,7 +78,7 @@ func TestSave_ZeroGaugePresent(t *testing.T) {
 	path := tmpPath(t)
 	fs := New(path)
 
-	if err := fs.Save([]*model.Metric{model.NewGaugeMetric("Zero", 0)}); err != nil {
+	if err := fs.save([]*model.Metric{model.NewGaugeMetric("Zero", 0)}); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
 
@@ -99,7 +102,7 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 		model.NewGaugeMetric("Alloc", 12.5),
 		model.NewCountMetric("PollCount", 7),
 	}
-	if err := fs.Save(in); err != nil {
+	if err := fs.save(in); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
 
@@ -179,7 +182,7 @@ func TestLoad_SkipsInvalidEntries(t *testing.T) {
 
 func TestSave_EmptyPathIsNoop(t *testing.T) {
 	fs := New("")
-	if err := fs.Save([]*model.Metric{model.NewGaugeMetric("x", 1)}); err != nil {
+	if err := fs.save([]*model.Metric{model.NewGaugeMetric("x", 1)}); err != nil {
 		t.Errorf("empty path Save should be no-op, got %v", err)
 	}
 	out, err := fs.Load()
@@ -188,10 +191,57 @@ func TestSave_EmptyPathIsNoop(t *testing.T) {
 	}
 }
 
+func TestSaveFrom_KeepsOrderWhenWriterIsDelayed(t *testing.T) {
+	path := tmpPath(t)
+	fs := New(path)
+	store := storage.NewMemStorage()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if err := store.Save(model.NewGaugeMetric("first", 1)); err != nil {
+			t.Errorf("store.Save: %v", err)
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+		if err := fs.SaveFrom(store); err != nil {
+			t.Errorf("SaveFrom: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(20 * time.Millisecond)
+		if err := store.Save(model.NewGaugeMetric("second", 2)); err != nil {
+			t.Errorf("store.Save: %v", err)
+			return
+		}
+		if err := fs.SaveFrom(store); err != nil {
+			t.Errorf("SaveFrom: %v", err)
+		}
+	}()
+
+	wg.Wait()
+
+	loaded, err := fs.Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, m := range loaded {
+		ids[m.ID] = true
+	}
+	if !ids["first"] || !ids["second"] {
+		t.Errorf("устаревший снимок затёр более свежий, на диске %v", ids)
+	}
+}
+
 // Save создаёт промежуточные директории пути.
 func TestSave_CreatesDir(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "dir", "metrics.json")
-	if err := New(path).Save([]*model.Metric{model.NewGaugeMetric("x", 1)}); err != nil {
+	if err := New(path).save([]*model.Metric{model.NewGaugeMetric("x", 1)}); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
 	if _, err := os.Stat(path); err != nil {

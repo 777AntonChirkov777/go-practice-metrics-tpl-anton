@@ -10,16 +10,35 @@ import (
 	model "practice/internal/model"
 )
 
+type Snapshotter interface {
+	GetAll() []*model.Metric
+}
+
 type FileStore struct {
-	mu   sync.Mutex
-	path string
+	mu       sync.Mutex
+	path     string
+	dirReady bool
 }
 
 func New(path string) *FileStore {
 	return &FileStore{path: path}
 }
 
-func (fs *FileStore) Save(metrics []*model.Metric) error {
+func (fs *FileStore) SaveFrom(src Snapshotter) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.saveLocked(src.GetAll())
+}
+
+func (fs *FileStore) save(metrics []*model.Metric) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.saveLocked(metrics)
+}
+
+func (fs *FileStore) saveLocked(metrics []*model.Metric) error {
 	if fs.path == "" {
 		return nil
 	}
@@ -34,13 +53,13 @@ func (fs *FileStore) Save(metrics []*model.Metric) error {
 		return err
 	}
 
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	if dir := filepath.Dir(fs.path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
+	if !fs.dirReady {
+		if dir := filepath.Dir(fs.path); dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
 		}
+		fs.dirReady = true
 	}
 
 	// Пишем во временный файл рядом с целевым и атомарно переименовываем,

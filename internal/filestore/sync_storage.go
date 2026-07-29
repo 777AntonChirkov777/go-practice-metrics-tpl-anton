@@ -9,20 +9,30 @@ import (
 )
 
 type SyncStorage struct {
-	storage.MetricStorage
-	fs *FileStore
+	store storage.MetricStorage
+	fs    *FileStore
 }
 
+var _ storage.MetricStorage = (*SyncStorage)(nil)
+
 func NewSyncStorage(store storage.MetricStorage, fs *FileStore) *SyncStorage {
-	return &SyncStorage{MetricStorage: store, fs: fs}
+	return &SyncStorage{store: store, fs: fs}
 }
 
 func (s *SyncStorage) Save(m *model.Metric) error {
-	if err := s.MetricStorage.Save(m); err != nil {
+	if err := s.store.Save(m); err != nil {
 		return err
 	}
-	if err := s.fs.Save(s.MetricStorage.GetAll()); err != nil {
+	if err := s.fs.SaveFrom(s.store); err != nil {
 		logger.Log.Info("synchronous dump failed", zap.Error(err))
 	}
 	return nil
+}
+
+func (s *SyncStorage) Get(mtype model.MetricType, name string) (*model.Metric, bool) {
+	return s.store.Get(mtype, name)
+}
+
+func (s *SyncStorage) GetAll() []*model.Metric {
+	return s.store.GetAll()
 }
