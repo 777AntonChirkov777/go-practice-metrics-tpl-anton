@@ -2,7 +2,6 @@ package storage
 
 import (
 	model "practice/internal/model"
-	repository "practice/internal/repository"
 	"sync"
 )
 
@@ -13,26 +12,25 @@ type MemStorage struct {
 }
 
 func NewMemStorage() *MemStorage {
-	s := &MemStorage{
+	return &MemStorage{
 		gauges:  make(map[string]*model.Metric),
 		counter: make(map[string]*model.Metric),
 	}
-	s.loadFromFile()
-	return s
 }
 
-// loadFromFile подтягивает уже сохранённые метрики из JSONL при старте.
-func (s *MemStorage) loadFromFile() {
-	all, err := repository.ReadAll()
-	if err != nil {
-		return
-	}
-	for _, m := range all {
-		switch model.MetricType(m.MType) {
+// LoadAll заполняет хранилище переданными метриками с семантикой «замены»
+// (set), а не накопления: используется при восстановлении из файла на старте.
+func (s *MemStorage) LoadAll(metrics []*model.Metric) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, m := range metrics {
+		cp := *m
+		switch model.MetricType(cp.MType) {
 		case model.Gauge:
-			s.gauges[m.ID] = m
+			s.gauges[cp.ID] = &cp
 		case model.Counter:
-			s.counter[m.ID] = m
+			s.counter[cp.ID] = &cp
 		}
 	}
 }
@@ -47,7 +45,6 @@ func (s *MemStorage) Save(m *model.Metric) error {
 		if existing, ok := s.gauges[m.ID]; ok {
 			existing.Value = m.Value
 			existing.Hash = m.Hash
-			m = existing
 		} else {
 			s.gauges[m.ID] = m
 		}
@@ -56,14 +53,12 @@ func (s *MemStorage) Save(m *model.Metric) error {
 		if existing, ok := s.counter[m.ID]; ok {
 			existing.Delta += m.Delta
 			existing.Hash = m.Hash
-			m = existing
 		} else {
 			s.counter[m.ID] = m
 		}
 	}
 
-	// персистентность — пишем в файл через существующий репозиторий
-	return repository.SaveMetric(*m)
+	return nil
 }
 
 func (s *MemStorage) Get(mtype model.MetricType, name string) (*model.Metric, bool) {

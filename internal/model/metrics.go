@@ -6,10 +6,6 @@ import (
 	"fmt"
 )
 
-const (
-	FileName = "metricData.jsonl"
-)
-
 type Metric struct {
 	ID    string  `json:"id"`
 	MType int8    `json:"type"`
