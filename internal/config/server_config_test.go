@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var serverEnvKeys = []string{"ADDRESS", "STORE_INTERVAL", "FILE_STORAGE_PATH", "RESTORE"}
+var serverEnvKeys = []string{"ADDRESS", "STORE_INTERVAL", "FILE_STORAGE_PATH", "RESTORE", "DATABASE_DSN"}
 
 func resetServerEnv(t *testing.T) {
 	t.Helper()
@@ -48,6 +48,9 @@ func TestGetServerConfig_Defaults(t *testing.T) {
 	if !cfg.Restore {
 		t.Errorf("Restore = %v, want true", cfg.Restore)
 	}
+	if cfg.DatabaseDSN != "" {
+		t.Errorf("DatabaseDSN = %q, want empty", cfg.DatabaseDSN)
+	}
 }
 
 func TestGetServerConfig_FlagsOnly(t *testing.T) {
@@ -55,6 +58,7 @@ func TestGetServerConfig_FlagsOnly(t *testing.T) {
 
 	cfg, err := GetServerConfig([]string{
 		"-a=localhost:9999", "-i=10", "-f=/tmp/x.json", "-r=false",
+		"-d=postgres://flag:flag@localhost:5432/praktikum?sslmode=disable",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -70,6 +74,9 @@ func TestGetServerConfig_FlagsOnly(t *testing.T) {
 	}
 	if cfg.Restore {
 		t.Errorf("Restore = %v, want false (from flag)", cfg.Restore)
+	}
+	if cfg.DatabaseDSN != "postgres://flag:flag@localhost:5432/praktikum?sslmode=disable" {
+		t.Errorf("DatabaseDSN = %q, want value from -d flag", cfg.DatabaseDSN)
 	}
 }
 
@@ -142,6 +149,32 @@ func TestGetServerConfig_EnvRestoreFalse(t *testing.T) {
 	}
 }
 
+func TestGetServerConfig_EnvDatabaseDSNOverridesFlag(t *testing.T) {
+	resetServerEnv(t)
+	_ = os.Setenv("DATABASE_DSN", "postgres://env:env@localhost:5432/praktikum?sslmode=disable")
+
+	cfg, err := GetServerConfig([]string{"-d=postgres://flag:flag@localhost:5432/praktikum?sslmode=disable"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DatabaseDSN != "postgres://env:env@localhost:5432/praktikum?sslmode=disable" {
+		t.Errorf("DatabaseDSN = %q, want value from env (env must win over -d)", cfg.DatabaseDSN)
+	}
+}
+
+func TestGetServerConfig_EmptyEnvDatabaseDSNKeepsFlag(t *testing.T) {
+	resetServerEnv(t)
+	_ = os.Setenv("DATABASE_DSN", "")
+
+	cfg, err := GetServerConfig([]string{"-d=postgres://flag:flag@localhost:5432/praktikum?sslmode=disable"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DatabaseDSN != "postgres://flag:flag@localhost:5432/praktikum?sslmode=disable" {
+		t.Errorf("DatabaseDSN = %q, want value from -d flag (empty env is ignored)", cfg.DatabaseDSN)
+	}
+}
+
 // Полный «автотестовый» сценарий: конфигурация только из env, без флагов.
 func TestGetServerConfig_EnvOnlyLikeAutotest(t *testing.T) {
 	resetServerEnv(t)
@@ -149,6 +182,7 @@ func TestGetServerConfig_EnvOnlyLikeAutotest(t *testing.T) {
 	_ = os.Setenv("RESTORE", "true")
 	_ = os.Setenv("STORE_INTERVAL", "2")
 	_ = os.Setenv("FILE_STORAGE_PATH", "/tmp/metrics-db.json")
+	_ = os.Setenv("DATABASE_DSN", "postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable")
 
 	cfg, err := GetServerConfig(nil)
 	if err != nil {
@@ -165,5 +199,8 @@ func TestGetServerConfig_EnvOnlyLikeAutotest(t *testing.T) {
 	}
 	if !cfg.Restore {
 		t.Errorf("Restore = %v, want true", cfg.Restore)
+	}
+	if cfg.DatabaseDSN != "postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable" {
+		t.Errorf("DatabaseDSN = %q, want value from env", cfg.DatabaseDSN)
 	}
 }
