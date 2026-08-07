@@ -14,6 +14,7 @@ type ServerConfig struct {
 	StoreInterval   time.Duration `default:"300s"`
 	FileStoragePath string        `default:"metrics-db.json"`
 	Restore         bool          `default:"true"`
+	DatabaseDSN     string
 }
 
 func GetServerConfig(args []string) (*ServerConfig, error) {
@@ -33,6 +34,7 @@ func GetServerConfig(args []string) (*ServerConfig, error) {
 	cfg.StoreInterval = time.Duration(flagCfg.StoreInterval) * time.Second
 	cfg.FileStoragePath = flagCfg.FileStoragePath
 	cfg.Restore = flagCfg.Restore
+	cfg.DatabaseDSN = flagCfg.DatabaseDSN
 
 	// Слой окружения. Переопределяем только присутствующие (не-nil) поля.
 	envCfg, err := env.GetServerConfigEnv()
@@ -50,6 +52,9 @@ func GetServerConfig(args []string) (*ServerConfig, error) {
 	}
 	if envCfg.Restore != nil {
 		cfg.Restore = *envCfg.Restore
+	}
+	if envCfg.DatabaseDSN != nil && *envCfg.DatabaseDSN != "" {
+		cfg.DatabaseDSN = *envCfg.DatabaseDSN
 	}
 
 	return cfg, nil

@@ -10,6 +10,7 @@ type ServerConfigFlag struct {
 	StoreInterval   int
 	FileStoragePath string
 	Restore         bool
+	DatabaseDSN     string
 }
 
 func ParseServerFlags(args []string) (*ServerConfigFlag, error) {
@@ -20,6 +21,7 @@ func ParseServerFlags(args []string) (*ServerConfigFlag, error) {
 	fs.IntVar(&cfg.StoreInterval, "i", 300, "интервал записи метрик на диск в секундах (0 — синхронно)")
 	fs.StringVar(&cfg.FileStoragePath, "f", "metrics-db.json", "путь до файла, куда сохраняются метрики")
 	fs.BoolVar(&cfg.Restore, "r", true, "загружать ли сохранённые метрики при старте")
+	fs.StringVar(&cfg.DatabaseDSN, "d", "", "строка подключения к базе данных")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("не удалось разобрать флаги: %w", err)

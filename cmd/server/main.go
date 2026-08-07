@@ -14,6 +14,7 @@ import (
 
 	"practice/internal/compress"
 	config "practice/internal/config"
+	"practice/internal/db"
 	"practice/internal/filestore"
 	handlers "practice/internal/handler"
 	"practice/internal/logger"
@@ -41,6 +42,22 @@ func run() error {
 		return fmt.Errorf("error logger initialization: %w", err)
 	}
 	defer logger.Sync()
+
+	var pinger handlers.Pinger
+	if conn, err := db.New(cfg.DatabaseDSN); err != nil {
+		logger.Log.Info("database open failed", zap.Error(err))
+	} else if conn != nil {
+		defer conn.Close()
+		pinger = conn
+
+		pingCtx, cancelPing := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := conn.PingContext(pingCtx); err != nil {
+			logger.Log.Info("database ping failed on startup", zap.Error(err))
+		} else {
+			logger.Log.Info("database connected")
+		}
+		cancelPing()
+	}
 
 	store := storage.NewMemStorage()
 	fs := filestore.New(cfg.FileStoragePath)
@@ -92,6 +109,10 @@ func run() error {
 	// Текстовые эндпоинты инкрементов 1-5 остаются нетронутыми.
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)
+
+	ph := handlers.NewPingHandler(pinger)
+	r.Get("/ping", ph.Ping)
+	r.Get("/ping/", ph.Ping)
 
 	_, port, err := net.SplitHostPort(cfg.Address)
 	if err != nil {
