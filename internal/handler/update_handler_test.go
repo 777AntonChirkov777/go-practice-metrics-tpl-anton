@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	model "practice/internal/model"
+	"practice/internal/storage"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -21,7 +23,7 @@ func NewMockStorage() *MockStorage {
 	}
 }
 
-func (m *MockStorage) Save(metric *model.Metric) error {
+func (m *MockStorage) Save(_ context.Context, metric *model.Metric) error {
 	key := metric.ID + "_" + string(rune(metric.MType))
 
 	// Реализуем логику накопления для counter
@@ -37,18 +39,21 @@ func (m *MockStorage) Save(metric *model.Metric) error {
 	return nil
 }
 
-func (m *MockStorage) Get(mtype model.MetricType, name string) (*model.Metric, bool) {
+func (m *MockStorage) Get(_ context.Context, mtype model.MetricType, name string) (*model.Metric, error) {
 	key := name + "_" + string(rune(mtype))
 	metric, ok := m.metrics[key]
-	return metric, ok
+	if !ok {
+		return nil, storage.ErrNotFound
+	}
+	return metric, nil
 }
 
-func (m *MockStorage) GetAll() []*model.Metric {
+func (m *MockStorage) GetAll(_ context.Context) ([]*model.Metric, error) {
 	result := make([]*model.Metric, 0, len(m.metrics))
 	for _, m := range m.metrics {
 		result = append(result, m)
 	}
-	return result
+	return result, nil
 }
 
 // createTestRouter создаёт тестовый роутер с хендлерами
@@ -75,8 +80,8 @@ func TestUpdateHandler_Success_Gauge(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Проверяем, что метрика сохранилась
-	metric, ok := store.Get(model.Gauge, "test_metric")
-	assert.True(t, ok)
+	metric, err := store.Get(context.Background(), model.Gauge, "test_metric")
+	assert.NoError(t, err)
 	assert.Equal(t, "test_metric", metric.ID)
 	assert.Equal(t, float64(123.45), metric.Value)
 }
@@ -94,8 +99,8 @@ func TestUpdateHandler_Success_Counter(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	metric, ok := store.Get(model.Counter, "test_counter")
-	assert.True(t, ok)
+	metric, err := store.Get(context.Background(), model.Counter, "test_counter")
+	assert.NoError(t, err)
 	assert.Equal(t, "test_counter", metric.ID)
 	assert.Equal(t, int64(10), metric.Delta)
 }
@@ -165,7 +170,7 @@ func TestValueHandler_Success_Gauge(t *testing.T) {
 	// Добавляем тестовую метрику
 	gauge := model.NewGaugeMetric("test_metric", 123.45)
 	_ = gauge.CalculateHash()
-	_ = store.Save(gauge)
+	_ = store.Save(context.Background(), gauge)
 
 	router := createTestRouter(store)
 
@@ -185,7 +190,7 @@ func TestValueHandler_Success_Counter(t *testing.T) {
 
 	counter := model.NewCountMetric("test_counter", 42)
 	_ = counter.CalculateHash()
-	_ = store.Save(counter)
+	_ = store.Save(context.Background(), counter)
 
 	router := createTestRouter(store)
 
@@ -248,11 +253,11 @@ func TestListHandler_WithMetrics(t *testing.T) {
 
 	gauge := model.NewGaugeMetric("metric1", 100.5)
 	_ = gauge.CalculateHash()
-	_ = store.Save(gauge)
+	_ = store.Save(context.Background(), gauge)
 
 	counter := model.NewCountMetric("metric2", 50)
 	_ = counter.CalculateHash()
-	_ = store.Save(counter)
+	_ = store.Save(context.Background(), counter)
 
 	router := createTestRouter(store)
 

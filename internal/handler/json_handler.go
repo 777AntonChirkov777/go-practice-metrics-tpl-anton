@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	model "practice/internal/model"
+	"practice/internal/storage"
 	"strings"
 )
 
@@ -67,7 +69,7 @@ func (h *Handler) UpdateJSONHandler(res http.ResponseWriter, req *http.Request) 
 	}
 	_ = m.CalculateHash()
 
-	if err := h.store.Save(m); err != nil {
+	if err := h.store.Save(req.Context(), m); err != nil {
 		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -75,8 +77,12 @@ func (h *Handler) UpdateJSONHandler(res http.ResponseWriter, req *http.Request) 
 	// Save() возвращает только error, поэтому накопленное значение counter'а
 	// перечитываем: MemStorage.Save мутирует лежащий в map *Metric
 	// (existing.Delta += ...), а Get отдаёт копию этого объекта.
-	stored, found := h.store.Get(in.Type(), m.ID)
-	if !found || stored == nil {
+	stored, err := h.store.Get(req.Context(), in.Type(), m.ID)
+	if err != nil {
+		if !errors.Is(err, storage.ErrNotFound) {
+			http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 		stored = m
 	}
 
@@ -97,10 +103,14 @@ func (h *Handler) ValueJSONHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	m, found := h.store.Get(mtype, in.ID)
-	if !found {
-		// http.Error сам ставит text/plain; смешивать с application/json нельзя.
-		http.Error(res, "metric not found", http.StatusNotFound)
+	m, err := h.store.Get(req.Context(), mtype, in.ID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			// http.Error сам ставит text/plain; смешивать с application/json нельзя.
+			http.Error(res, "metric not found", http.StatusNotFound)
+			return
+		}
+		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

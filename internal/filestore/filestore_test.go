@@ -1,6 +1,7 @@
 package filestore
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -192,6 +193,7 @@ func TestSave_EmptyPathIsNoop(t *testing.T) {
 }
 
 func TestSaveFrom_KeepsOrderWhenWriterIsDelayed(t *testing.T) {
+	ctx := context.Background()
 	path := tmpPath(t)
 	fs := New(path)
 	store := storage.NewMemStorage()
@@ -201,12 +203,12 @@ func TestSaveFrom_KeepsOrderWhenWriterIsDelayed(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		if err := store.Save(model.NewGaugeMetric("first", 1)); err != nil {
+		if err := store.Save(ctx, model.NewGaugeMetric("first", 1)); err != nil {
 			t.Errorf("store.Save: %v", err)
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
-		if err := fs.SaveFrom(store); err != nil {
+		if err := fs.SaveFrom(ctx, store); err != nil {
 			t.Errorf("SaveFrom: %v", err)
 		}
 	}()
@@ -214,11 +216,11 @@ func TestSaveFrom_KeepsOrderWhenWriterIsDelayed(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		time.Sleep(20 * time.Millisecond)
-		if err := store.Save(model.NewGaugeMetric("second", 2)); err != nil {
+		if err := store.Save(ctx, model.NewGaugeMetric("second", 2)); err != nil {
 			t.Errorf("store.Save: %v", err)
 			return
 		}
-		if err := fs.SaveFrom(store); err != nil {
+		if err := fs.SaveFrom(ctx, store); err != nil {
 			t.Errorf("SaveFrom: %v", err)
 		}
 	}()

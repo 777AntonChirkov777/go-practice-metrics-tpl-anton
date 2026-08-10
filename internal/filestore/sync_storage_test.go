@@ -1,6 +1,7 @@
 package filestore
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -12,11 +13,12 @@ import (
 
 // В синхронном режиме каждое Save немедленно отражается на диске.
 func TestSyncStorage_DumpsOnEachSave(t *testing.T) {
+	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "metrics-db.json")
 	fs := New(path)
 	st := NewSyncStorage(storage.NewMemStorage(), fs)
 
-	if err := st.Save(model.NewGaugeMetric("cpu", 0.5)); err != nil {
+	if err := st.Save(ctx, model.NewGaugeMetric("cpu", 0.5)); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
 
@@ -29,10 +31,10 @@ func TestSyncStorage_DumpsOnEachSave(t *testing.T) {
 	}
 
 	// Второе обновление счётчика — на диске накопленное значение.
-	if err := st.Save(model.NewCountMetric("reqs", 3)); err != nil {
+	if err := st.Save(ctx, model.NewCountMetric("reqs", 3)); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
-	if err := st.Save(model.NewCountMetric("reqs", 4)); err != nil {
+	if err := st.Save(ctx, model.NewCountMetric("reqs", 4)); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
 
@@ -53,6 +55,7 @@ func TestSyncStorage_DumpsOnEachSave(t *testing.T) {
 }
 
 func TestSyncStorage_ConcurrentSavesAllPersisted(t *testing.T) {
+	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "metrics-db.json")
 	fs := New(path)
 	st := NewSyncStorage(storage.NewMemStorage(), fs)
@@ -65,7 +68,7 @@ func TestSyncStorage_ConcurrentSavesAllPersisted(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			// t.Errorf, а не t.Fatalf: Fatal из не-тестовой горутины запрещён.
-			if err := st.Save(model.NewGaugeMetric(fmt.Sprintf("g%02d", i), float64(i))); err != nil {
+			if err := st.Save(ctx, model.NewGaugeMetric(fmt.Sprintf("g%02d", i), float64(i))); err != nil {
 				t.Errorf("Save error: %v", err)
 			}
 		}(i)

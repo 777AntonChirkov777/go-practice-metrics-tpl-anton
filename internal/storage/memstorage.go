@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	model "practice/internal/model"
 	"sync"
 )
@@ -35,7 +36,7 @@ func (s *MemStorage) LoadAll(metrics []*model.Metric) {
 	}
 }
 
-func (s *MemStorage) Save(m *model.Metric) error {
+func (s *MemStorage) Save(_ context.Context, m *model.Metric) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -61,7 +62,7 @@ func (s *MemStorage) Save(m *model.Metric) error {
 	return nil
 }
 
-func (s *MemStorage) Get(mtype model.MetricType, name string) (*model.Metric, bool) {
+func (s *MemStorage) Get(_ context.Context, mtype model.MetricType, name string) (*model.Metric, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -69,18 +70,18 @@ func (s *MemStorage) Get(mtype model.MetricType, name string) (*model.Metric, bo
 	case model.Gauge:
 		if m, ok := s.gauges[name]; ok {
 			cp := *m
-			return &cp, true
+			return &cp, nil
 		}
 	case model.Counter:
 		if m, ok := s.counter[name]; ok {
 			cp := *m
-			return &cp, true
+			return &cp, nil
 		}
 	}
-	return nil, false
+	return nil, ErrNotFound
 }
 
-func (s *MemStorage) GetAll() []*model.Metric {
+func (s *MemStorage) GetAll(_ context.Context) ([]*model.Metric, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -94,5 +95,5 @@ func (s *MemStorage) GetAll() []*model.Metric {
 		cp := *m
 		out = append(out, &cp)
 	}
-	return out
+	return out, nil
 }
