@@ -1,6 +1,7 @@
 package filestore
 
 import (
+	"context"
 	"practice/internal/logger"
 	model "practice/internal/model"
 	"practice/internal/storage"
@@ -19,20 +20,20 @@ func NewSyncStorage(store storage.MetricStorage, fs *FileStore) *SyncStorage {
 	return &SyncStorage{store: store, fs: fs}
 }
 
-func (s *SyncStorage) Save(m *model.Metric) error {
-	if err := s.store.Save(m); err != nil {
+func (s *SyncStorage) Save(ctx context.Context, m *model.Metric) error {
+	if err := s.store.Save(ctx, m); err != nil {
 		return err
 	}
-	if err := s.fs.SaveFrom(s.store); err != nil {
+	if err := s.fs.SaveFrom(ctx, s.store); err != nil {
 		logger.Log.Info("synchronous dump failed", zap.Error(err))
 	}
 	return nil
 }
 
-func (s *SyncStorage) Get(mtype model.MetricType, name string) (*model.Metric, bool) {
-	return s.store.Get(mtype, name)
+func (s *SyncStorage) Get(ctx context.Context, mtype model.MetricType, name string) (*model.Metric, error) {
+	return s.store.Get(ctx, mtype, name)
 }
 
-func (s *SyncStorage) GetAll() []*model.Metric {
-	return s.store.GetAll()
+func (s *SyncStorage) GetAll(ctx context.Context) ([]*model.Metric, error) {
+	return s.store.GetAll(ctx)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net"
@@ -15,14 +16,18 @@ import (
 	"practice/internal/compress"
 	config "practice/internal/config"
 	"practice/internal/db"
+	"practice/internal/dbstore"
 	"practice/internal/filestore"
 	handlers "practice/internal/handler"
 	"practice/internal/logger"
 	"practice/internal/storage"
+	"practice/migrations"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
+
+const dbStartupTimeout = 2 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -43,56 +48,20 @@ func run() error {
 	}
 	defer logger.Sync()
 
-	var pinger handlers.Pinger
-	if conn, err := db.New(cfg.DatabaseDSN); err != nil {
-		logger.Log.Info("database open failed", zap.Error(err))
-	} else if conn != nil {
-		defer conn.Close()
-		pinger = conn
-
-		pingCtx, cancelPing := context.WithTimeout(context.Background(), 2*time.Second)
-		if err := conn.PingContext(pingCtx); err != nil {
-			logger.Log.Info("database ping failed on startup", zap.Error(err))
-		} else {
-			logger.Log.Info("database connected")
-		}
-		cancelPing()
-	}
-
-	store := storage.NewMemStorage()
-	fs := filestore.New(cfg.FileStoragePath)
-
-	// Восстановление ранее сохранённых значений.
-	if cfg.Restore {
-		metrics, err := fs.Load()
-		if err != nil {
-			logger.Log.Info("restore skipped", zap.Error(err))
-		} else {
-			store.LoadAll(metrics)
-			logger.Log.Info("metrics restored",
-				zap.Int("count", len(metrics)),
-				zap.String("file", cfg.FileStoragePath))
-		}
-	}
-
 	// Контекст, отменяемый по SIGINT/SIGTERM, — сигнал к остановке.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Выбор режима записи на диск.
-	var metricStore storage.MetricStorage = store
-	if cfg.StoreInterval <= 0 {
-		// Синхронный режим: пишем на диск при каждом обновлении.
-		metricStore = filestore.NewSyncStorage(store, fs)
-		logger.Log.Info("disk persistence: synchronous",
-			zap.String("file", cfg.FileStoragePath))
-	} else {
-		// Асинхронный режим: периодический сброс снимка на диск.
-		go periodicSave(ctx, fs, store, cfg.StoreInterval)
-		logger.Log.Info("disk persistence: periodic",
-			zap.Duration("interval", cfg.StoreInterval),
-			zap.String("file", cfg.FileStoragePath))
+	var pinger handlers.Pinger
+	conn, err := db.New(cfg.DatabaseDSN)
+	if err != nil {
+		logger.Log.Info("database open failed", zap.Error(err))
+	} else if conn != nil {
+		defer conn.Close()
+		pinger = conn
 	}
+
+	metricStore, onShutdown := buildStorage(ctx, cfg, conn)
 
 	h := handlers.NewHandler(metricStore)
 
@@ -147,16 +116,79 @@ func run() error {
 		logger.Log.Info("graceful shutdown error", zap.Error(err))
 	}
 
-	if err := fs.SaveFrom(store); err != nil {
-		logger.Log.Info("final dump failed", zap.Error(err))
-	} else {
-		logger.Log.Info("metrics saved on shutdown", zap.String("file", cfg.FileStoragePath))
-	}
+	onShutdown()
 
 	return runErr
 }
 
-func periodicSave(ctx context.Context, fs *filestore.FileStore, store *storage.MemStorage, interval time.Duration) {
+func buildStorage(ctx context.Context, cfg *config.ServerConfig, conn *sql.DB) (storage.MetricStorage, func()) {
+	noop := func() {}
+
+	if conn != nil {
+		pingCtx, cancelPing := context.WithTimeout(context.Background(), dbStartupTimeout)
+		if err := conn.PingContext(pingCtx); err != nil {
+			logger.Log.Info("database ping failed on startup", zap.Error(err))
+		} else {
+			logger.Log.Info("database connected")
+		}
+		cancelPing()
+
+		if err := migrations.Up(conn); err != nil {
+			logger.Log.Info("database migrations failed", zap.Error(err))
+		}
+
+		logger.Log.Info("storage: database")
+		return dbstore.New(conn), noop
+	}
+
+	store := storage.NewMemStorage()
+
+	if cfg.FileStoragePath == "" {
+		logger.Log.Info("storage: memory")
+		return store, noop
+	}
+
+	fs := filestore.New(cfg.FileStoragePath)
+
+	// Восстановление ранее сохранённых значений.
+	if cfg.Restore {
+		metrics, err := fs.Load()
+		if err != nil {
+			logger.Log.Info("restore skipped", zap.Error(err))
+		} else {
+			store.LoadAll(metrics)
+			logger.Log.Info("metrics restored",
+				zap.Int("count", len(metrics)),
+				zap.String("file", cfg.FileStoragePath))
+		}
+	}
+
+	onShutdown := func() {
+		if err := fs.SaveFrom(context.Background(), store); err != nil {
+			logger.Log.Info("final dump failed", zap.Error(err))
+		} else {
+			logger.Log.Info("metrics saved on shutdown", zap.String("file", cfg.FileStoragePath))
+		}
+	}
+
+	// Выбор режима записи на диск.
+	if cfg.StoreInterval <= 0 {
+		// Синхронный режим: пишем на диск при каждом обновлении.
+		logger.Log.Info("disk persistence: synchronous",
+			zap.String("file", cfg.FileStoragePath))
+		return filestore.NewSyncStorage(store, fs), onShutdown
+	}
+
+	// Асинхронный режим: периодический сброс снимка на диск.
+	go periodicSave(ctx, fs, store, cfg.StoreInterval)
+	logger.Log.Info("disk persistence: periodic",
+		zap.Duration("interval", cfg.StoreInterval),
+		zap.String("file", cfg.FileStoragePath))
+
+	return store, onShutdown
+}
+
+func periodicSave(ctx context.Context, fs *filestore.FileStore, src filestore.Snapshotter, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -165,7 +197,7 @@ func periodicSave(ctx context.Context, fs *filestore.FileStore, store *storage.M
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := fs.SaveFrom(store); err != nil {
+			if err := fs.SaveFrom(ctx, src); err != nil {
 				logger.Log.Info("periodic dump failed", zap.Error(err))
 			}
 		}

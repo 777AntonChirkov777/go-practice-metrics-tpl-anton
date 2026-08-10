@@ -27,3 +27,8 @@ vendor/
 # Runtime persistence artifact (default FILE_STORAGE_PATH)
 metrics-db.json
 metrics-db.json.tmp
+
+# Neural networks
+.codegraph/
+.claude/
+openspec/

@@ -2,6 +2,7 @@ package filestore
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 )
 
 type Snapshotter interface {
-	GetAll() []*model.Metric
+	GetAll(ctx context.Context) ([]*model.Metric, error)
 }
 
 type FileStore struct {
@@ -24,11 +25,16 @@ func New(path string) *FileStore {
 	return &FileStore{path: path}
 }
 
-func (fs *FileStore) SaveFrom(src Snapshotter) error {
+func (fs *FileStore) SaveFrom(ctx context.Context, src Snapshotter) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	return fs.saveLocked(src.GetAll())
+	metrics, err := src.GetAll(ctx)
+	if err != nil {
+		return err
+	}
+
+	return fs.saveLocked(metrics)
 }
 
 func (fs *FileStore) save(metrics []*model.Metric) error {

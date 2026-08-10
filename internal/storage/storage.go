@@ -1,11 +1,18 @@
 package storage
 
-import models "practice/internal/model"
+import (
+	"context"
+	"errors"
+
+	models "practice/internal/model"
+)
+
+var ErrNotFound = errors.New("metric not found")
 
 // MetricStorage — контракт, через который handlers работают с хранилищем.
 // Это позволяет подменить in-memory реализацию на БД без переписывания handlers.
 type MetricStorage interface {
-	Save(m *models.Metric) error
-	Get(mtype models.MetricType, name string) (*models.Metric, bool)
-	GetAll() []*models.Metric
+	Save(ctx context.Context, m *models.Metric) error
+	Get(ctx context.Context, mtype models.MetricType, name string) (*models.Metric, error)
+	GetAll(ctx context.Context) ([]*models.Metric, error)
 }

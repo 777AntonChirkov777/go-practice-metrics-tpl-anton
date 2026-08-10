@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	model "practice/internal/model"
@@ -51,7 +52,7 @@ func (h *Handler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
 	}
 	_ = m.CalculateHash()
 
-	if err := h.store.Save(m); err != nil {
+	if err := h.store.Save(req.Context(), m); err != nil {
 		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -70,9 +71,13 @@ func (h *Handler) ValueHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	m, ok := h.store.Get(mtype, name)
-	if !ok {
-		http.Error(res, "metric not found", http.StatusNotFound)
+	m, err := h.store.Get(req.Context(), mtype, name)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			http.Error(res, "metric not found", http.StatusNotFound)
+			return
+		}
+		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -89,7 +94,11 @@ func (h *Handler) ValueHandler(res http.ResponseWriter, req *http.Request) {
 
 // GET / — HTML со списком всех метрик
 func (h *Handler) ListHandler(res http.ResponseWriter, req *http.Request) {
-	all := h.store.GetAll()
+	all, err := h.store.GetAll(req.Context())
+	if err != nil {
+		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	var b strings.Builder
 	b.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Metrics</title></head><body>`)
