@@ -88,20 +88,30 @@ func (a *Agent) CollectMetrics() {
 
 // report отправляет все собранные метрики на сервер.
 func (a *Agent) report() {
+	batch := a.snapshot()
+	if len(batch) == 0 {
+		return
+	}
+
+	a.sendBatch(batch)
+}
+
+// snapshot копирует данные, чтобы не держать лок при HTTP-запросах.
+func (a *Agent) snapshot() []models.Metrics {
 	a.mu.Lock()
-	// Копируем данные, чтобы не держать лок при HTTP-запросах.
-	gaugesCopy := make(map[string]float64, len(a.gauges))
-	for k, v := range a.gauges {
-		gaugesCopy[k] = v
-	}
-	pollCount := a.pollCount
-	a.mu.Unlock()
+	defer a.mu.Unlock()
 
-	for name, val := range gaugesCopy {
-		a.sendMetric(models.NewGaugeDTO(name, val))
+	if len(a.gauges) == 0 && a.pollCount == 0 {
+		return nil
 	}
 
-	a.sendMetric(models.NewCounterDTO("PollCount", pollCount))
+	batch := make([]models.Metrics, 0, len(a.gauges)+1)
+	for name, val := range a.gauges {
+		batch = append(batch, models.NewGaugeDTO(name, val))
+	}
+	batch = append(batch, models.NewCounterDTO("PollCount", a.pollCount))
+
+	return batch
 }
 
 // gzipJSON сжимает тело в gzip. Сжимаем в буфер целиком (тело одной метрики
@@ -122,32 +132,29 @@ func gzipJSON(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// sendMetric отправляет одну метрику на POST /update/ телом-JSON, сжатым gzip
-// (Content-Encoding: gzip). Accept-Encoding агент не ставит вручную:
-// http.Transport сам добавляет его и прозрачно распаковывает ответ сервера.
-func (a *Agent) sendMetric(m models.Metrics) {
+func (a *Agent) sendBatch(batch []models.Metrics) {
 	// Слэш на конце — форма, которую использует сервер и автотесты; сервер
 	// принимает обе.
-	url := a.serverURL + "/update/"
+	url := a.serverURL + "/updates/"
 
-	body, err := json.Marshal(m)
+	body, err := json.Marshal(batch)
 	if err != nil {
-		logger.Log.Info("marshal metric failed",
-			zap.String("id", m.ID), zap.Error(err))
+		logger.Log.Info("marshal batch failed",
+			zap.Int("metrics", len(batch)), zap.Error(err))
 		return
 	}
 
 	body, err = gzipJSON(body)
 	if err != nil {
-		logger.Log.Info("gzip metric failed",
-			zap.String("id", m.ID), zap.Error(err))
+		logger.Log.Info("gzip batch failed",
+			zap.Int("metrics", len(batch)), zap.Error(err))
 		return
 	}
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		// zap.Error — это поле; уровень сообщения остаётся Info.
-		logger.Log.Info("build metric request failed",
+		logger.Log.Info("build batch request failed",
 			zap.String("url", url), zap.Error(err))
 		return
 	}
@@ -158,19 +165,16 @@ func (a *Agent) sendMetric(m models.Metrics) {
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		logger.Log.Info("send metric failed",
+		logger.Log.Info("send batch failed",
 			zap.String("url", url), zap.Error(err))
 		return
 	}
-	// Тело обязательно дочитать, а не только закрыть: раньше ответы были
-	// пустые, теперь /update/ возвращает JSON, и непрочитанный хвост не даёт
-	// вернуть соединение в keep-alive пул — новый сокет на каждую метрику.
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Log.Info("unexpected response status",
-			zap.String("id", m.ID), zap.Int("status", resp.StatusCode))
+			zap.Int("metrics", len(batch)), zap.Int("status", resp.StatusCode))
 	}
 }
 

@@ -30,6 +30,20 @@ func (s *SyncStorage) Save(ctx context.Context, m *model.Metric) error {
 	return nil
 }
 
+func (s *SyncStorage) SaveBatch(ctx context.Context, metrics []*model.Metric) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	if err := s.store.SaveBatch(ctx, metrics); err != nil {
+		return err
+	}
+	if err := s.fs.SaveFrom(ctx, s.store); err != nil {
+		logger.Log.Info("synchronous batch dump failed", zap.Error(err))
+	}
+	return nil
+}
+
 func (s *SyncStorage) Get(ctx context.Context, mtype model.MetricType, name string) (*model.Metric, error) {
 	return s.store.Get(ctx, mtype, name)
 }
