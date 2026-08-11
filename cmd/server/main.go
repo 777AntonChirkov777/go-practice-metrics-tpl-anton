@@ -75,6 +75,9 @@ func run() error {
 	r.Post("/value", h.ValueJSONHandler)
 	r.Post("/value/", h.ValueJSONHandler)
 
+	r.Post("/updates", h.UpdatesJSONHandler)
+	r.Post("/updates/", h.UpdatesJSONHandler)
+
 	// Текстовые эндпоинты инкрементов 1-5 остаются нетронутыми.
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)

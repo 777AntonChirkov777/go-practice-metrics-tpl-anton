@@ -12,6 +12,8 @@ type MemStorage struct {
 	counter map[string]*model.Metric
 }
 
+var _ MetricStorage = (*MemStorage)(nil)
+
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		gauges:  make(map[string]*model.Metric),
@@ -40,6 +42,27 @@ func (s *MemStorage) Save(_ context.Context, m *model.Metric) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.saveLocked(m)
+
+	return nil
+}
+
+func (s *MemStorage) SaveBatch(_ context.Context, metrics []*model.Metric) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, m := range metrics {
+		s.saveLocked(m)
+	}
+
+	return nil
+}
+
+func (s *MemStorage) saveLocked(m *model.Metric) {
 	switch model.MetricType(m.MType) {
 	case model.Gauge:
 		// если уже есть — обновляем Value
@@ -58,8 +81,6 @@ func (s *MemStorage) Save(_ context.Context, m *model.Metric) error {
 			s.counter[m.ID] = m
 		}
 	}
-
-	return nil
 }
 
 func (s *MemStorage) Get(_ context.Context, mtype model.MetricType, name string) (*model.Metric, error) {

@@ -1,14 +1,19 @@
 package dbstore
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	model "practice/internal/model"
 	"practice/internal/storage"
 )
+
+const upsertChunkSize = 1000
 
 type Storage struct {
 	db *sql.DB
@@ -37,6 +42,130 @@ func (s *Storage) Save(ctx context.Context, m *model.Metric) error {
 	default:
 		return fmt.Errorf("%w: %d", model.ErrUnknownType, m.MType)
 	}
+}
+
+func (s *Storage) SaveBatch(ctx context.Context, metrics []*model.Metric) error {
+	gauges, counters, err := aggregate(metrics)
+	if err != nil {
+		return err
+	}
+
+	statements := append(gaugeStatements(gauges), counterStatements(counters)...)
+	if len(statements) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, st := range statements {
+		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+type gaugeRow struct {
+	id    string
+	value float64
+}
+
+type counterRow struct {
+	id    string
+	delta int64
+}
+
+type statement struct {
+	query string
+	args  []any
+}
+
+func aggregate(metrics []*model.Metric) ([]gaugeRow, []counterRow, error) {
+	gauges := make(map[string]float64)
+	counters := make(map[string]int64)
+
+	for _, m := range metrics {
+		switch model.MetricType(m.MType) {
+		case model.Gauge:
+			gauges[m.ID] = m.Value
+		case model.Counter:
+			counters[m.ID] += m.Delta
+		default:
+			return nil, nil, fmt.Errorf("%w: %d", model.ErrUnknownType, m.MType)
+		}
+	}
+
+	gaugeRows := make([]gaugeRow, 0, len(gauges))
+	for id, value := range gauges {
+		gaugeRows = append(gaugeRows, gaugeRow{id: id, value: value})
+	}
+	slices.SortFunc(gaugeRows, func(a, b gaugeRow) int { return cmp.Compare(a.id, b.id) })
+
+	counterRows := make([]counterRow, 0, len(counters))
+	for id, delta := range counters {
+		counterRows = append(counterRows, counterRow{id: id, delta: delta})
+	}
+	slices.SortFunc(counterRows, func(a, b counterRow) int { return cmp.Compare(a.id, b.id) })
+
+	return gaugeRows, counterRows, nil
+}
+
+func gaugeStatements(rows []gaugeRow) []statement {
+	out := make([]statement, 0)
+	for chunk := range slices.Chunk(rows, upsertChunkSize) {
+		out = append(out, buildGaugeUpsert(chunk))
+	}
+	return out
+}
+
+func counterStatements(rows []counterRow) []statement {
+	out := make([]statement, 0)
+	for chunk := range slices.Chunk(rows, upsertChunkSize) {
+		out = append(out, buildCounterUpsert(chunk))
+	}
+	return out
+}
+
+func buildGaugeUpsert(rows []gaugeRow) statement {
+	args := make([]any, 0, len(rows)*2)
+	for _, r := range rows {
+		args = append(args, r.id, r.value)
+	}
+
+	return statement{
+		query: `INSERT INTO gauges (id, value) VALUES ` + valuePlaceholders(len(rows)) +
+			` ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`,
+		args: args,
+	}
+}
+
+func buildCounterUpsert(rows []counterRow) statement {
+	args := make([]any, 0, len(rows)*2)
+	for _, r := range rows {
+		args = append(args, r.id, r.delta)
+	}
+
+	return statement{
+		query: `INSERT INTO counters (id, delta) VALUES ` + valuePlaceholders(len(rows)) +
+			` ON CONFLICT (id) DO UPDATE SET delta = counters.delta + EXCLUDED.delta`,
+		args: args,
+	}
+}
+
+func valuePlaceholders(rows int) string {
+	var b strings.Builder
+	for i := range rows {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "($%d, $%d)", i*2+1, i*2+2)
+	}
+	return b.String()
 }
 
 func (s *Storage) Get(ctx context.Context, mtype model.MetricType, name string) (*model.Metric, error) {

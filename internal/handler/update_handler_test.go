@@ -14,7 +14,8 @@ import (
 
 // MockStorage — тестовая реализация MetricStorage
 type MockStorage struct {
-	metrics map[string]*model.Metric
+	metrics  map[string]*model.Metric
+	batchErr error
 }
 
 func NewMockStorage() *MockStorage {
@@ -36,6 +37,19 @@ func (m *MockStorage) Save(_ context.Context, metric *model.Metric) error {
 	}
 
 	m.metrics[key] = metric
+	return nil
+}
+
+func (m *MockStorage) SaveBatch(ctx context.Context, metrics []*model.Metric) error {
+	if m.batchErr != nil {
+		return m.batchErr
+	}
+
+	for _, metric := range metrics {
+		if err := m.Save(ctx, metric); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

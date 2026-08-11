@@ -3,7 +3,6 @@ package agent
 import (
 	"compress/gzip"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	models "practice/internal/model"
@@ -46,64 +45,20 @@ func TestCollectMetrics(t *testing.T) {
 	}
 }
 
-// TestSendMetricGzipsBody проверяет, что одиночная отправка уходит с
-// Content-Encoding: gzip и корректно распаковывается на стороне сервера.
-func TestSendMetricGzipsBody(t *testing.T) {
+func TestReport(t *testing.T) {
 	// Хендлер httptest.Server выполняется в отдельной горутине; общие
 	// переменные защищаем мьютексом, чтобы тест был чист под go test -race.
 	var mu sync.Mutex
-	var got models.Metrics
-	var gotEncoding string
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		enc := r.Header.Get("Content-Encoding")
-
-		zr, err := gzip.NewReader(r.Body)
-		if err != nil {
-			t.Errorf("body is not gzip: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		raw, _ := io.ReadAll(zr)
-		var m models.Metrics
-		if err := json.Unmarshal(raw, &m); err != nil {
-			t.Errorf("decode: %v", err)
-		}
-		mu.Lock()
-		gotEncoding = enc
-		got = m
-		mu.Unlock()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write(raw)
-	}))
-	defer srv.Close()
-
-	// sendMetric синхронен: после его возврата хендлер уже отработал.
-	a := NewAgent(time.Second, time.Second, srv.URL)
-	a.sendMetric(models.NewGaugeDTO("Alloc", 123.5))
-
-	mu.Lock()
-	defer mu.Unlock()
-	if gotEncoding != "gzip" {
-		t.Fatalf("Content-Encoding = %q, want gzip", gotEncoding)
-	}
-	if got.ID != "Alloc" || got.MType != "gauge" {
-		t.Fatalf("decoded metric = %+v, want Alloc/gauge", got)
-	}
-	if got.Value == nil || *got.Value != 123.5 {
-		t.Fatalf("decoded value = %v, want 123.5", got.Value)
-	}
-}
-
-func TestReport(t *testing.T) {
-	var mu sync.Mutex
+	var requests int
 	var received []models.Metrics
 
 	// Тестовый HTTP-сервер, имитирующий сервер сбора метрик (JSON API).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/update/" {
+		mu.Lock()
+		requests++
+		mu.Unlock()
+
+		if r.Method != http.MethodPost || r.URL.Path != "/updates/" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -128,19 +83,17 @@ func TestReport(t *testing.T) {
 		}
 		defer body.Close()
 
-		var m models.Metrics
-		if err := json.NewDecoder(body).Decode(&m); err != nil {
-			t.Errorf("decode metric: %v", err)
+		var batch []models.Metrics
+		if err := json.NewDecoder(body).Decode(&batch); err != nil {
+			t.Errorf("decode batch: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		mu.Lock()
-		received = append(received, m)
+		received = append(received, batch...)
 		mu.Unlock()
 
-		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(m)
 	}))
 	defer srv.Close()
 
@@ -149,10 +102,14 @@ func TestReport(t *testing.T) {
 	agent.report()
 
 	mu.Lock()
+	gotRequests := requests
 	got := make([]models.Metrics, len(received))
 	copy(got, received)
 	mu.Unlock()
 
+	if gotRequests != 1 {
+		t.Fatalf("requests = %d, want exactly 1 batch request", gotRequests)
+	}
 	if len(got) == 0 {
 		t.Fatal("no metrics were reported")
 	}
@@ -204,5 +161,100 @@ func TestReport(t *testing.T) {
 	}
 	if !hasCounter {
 		t.Error("expected PollCount counter to be reported")
+	}
+}
+
+func TestReportSkipsEmptyBatch(t *testing.T) {
+	var mu sync.Mutex
+	var requests int
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	agent := NewAgent(time.Second, time.Second, srv.URL)
+	agent.report()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if requests != 0 {
+		t.Fatalf("requests = %d, want 0 when there is nothing collected", requests)
+	}
+}
+
+func TestReportConcurrentWithCollect(t *testing.T) {
+	var mu sync.Mutex
+	var batches int
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := gzip.NewReader(r.Body)
+		if err != nil {
+			t.Errorf("body is not gzip: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer body.Close()
+
+		var batch []models.Metrics
+		if err := json.NewDecoder(body).Decode(&batch); err != nil {
+			t.Errorf("decode batch: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Снимок обязан быть согласованным: у каждой метрики заполнено ровно
+		// одно из delta/value, даже когда сбор идёт параллельно с отправкой.
+		for _, m := range batch {
+			switch m.MType {
+			case "gauge":
+				if m.Value == nil || m.Delta != nil {
+					t.Errorf("inconsistent gauge in batch: %+v", m)
+				}
+			case "counter":
+				if m.Delta == nil || m.Value != nil {
+					t.Errorf("inconsistent counter in batch: %+v", m)
+				}
+			default:
+				t.Errorf("unexpected metric type %q", m.MType)
+			}
+		}
+
+		mu.Lock()
+		batches++
+		mu.Unlock()
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	agent := NewAgent(time.Second, time.Second, srv.URL)
+	agent.CollectMetrics()
+
+	const rounds = 50
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < rounds; i++ {
+			agent.CollectMetrics()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < rounds; i++ {
+			agent.report()
+		}
+	}()
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if batches != rounds {
+		t.Errorf("batches = %d, want %d", batches, rounds)
 	}
 }
