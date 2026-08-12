@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"practice/internal/logger"
 	models "practice/internal/model"
+	"practice/internal/retry"
 	"runtime"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ type Agent struct {
 	reportInterval time.Duration
 	serverURL      string
 	client         *http.Client
+	retryDelays    []time.Duration
 	mu             sync.Mutex
 	gauges         map[string]float64
 	pollCount      int64
@@ -38,6 +40,7 @@ func NewAgent(pollInterval, reportInterval time.Duration, serverURL string) *Age
 		reportInterval: reportInterval,
 		serverURL:      serverURL,
 		client:         &http.Client{Timeout: 5 * time.Second},
+		retryDelays:    retry.DefaultDelays,
 		gauges:         make(map[string]float64),
 	}
 }
@@ -87,13 +90,17 @@ func (a *Agent) CollectMetrics() {
 }
 
 // report отправляет все собранные метрики на сервер.
-func (a *Agent) report() {
+func (a *Agent) report(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+
 	batch := a.snapshot()
 	if len(batch) == 0 {
 		return
 	}
 
-	a.sendBatch(batch)
+	a.sendBatch(ctx, batch)
 }
 
 // snapshot копирует данные, чтобы не держать лок при HTTP-запросах.
@@ -132,7 +139,7 @@ func gzipJSON(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (a *Agent) sendBatch(batch []models.Metrics) {
+func (a *Agent) sendBatch(ctx context.Context, batch []models.Metrics) {
 	// Слэш на конце — форма, которую использует сервер и автотесты; сервер
 	// принимает обе.
 	url := a.serverURL + "/updates/"
@@ -151,12 +158,21 @@ func (a *Agent) sendBatch(batch []models.Metrics) {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	err = retry.Do(ctx, "agent.sendBatch", a.retryDelays,
+		func(error) bool { return ctx.Err() == nil },
+		func(ctx context.Context) error {
+			return a.postBatch(ctx, url, body, len(batch))
+		})
 	if err != nil {
-		// zap.Error — это поле; уровень сообщения остаётся Info.
-		logger.Log.Info("build batch request failed",
+		logger.Log.Info("send batch failed",
 			zap.String("url", url), zap.Error(err))
-		return
+	}
+}
+
+func (a *Agent) postBatch(ctx context.Context, url string, body []byte, metrics int) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
 	}
 	// Content-Type описывает распакованное тело, Content-Encoding — как оно
 	// упаковано на проводе. Оба заголовка обязательны.
@@ -165,17 +181,17 @@ func (a *Agent) sendBatch(batch []models.Metrics) {
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		logger.Log.Info("send batch failed",
-			zap.String("url", url), zap.Error(err))
-		return
+		return err
 	}
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Log.Info("unexpected response status",
-			zap.Int("metrics", len(batch)), zap.Int("status", resp.StatusCode))
+			zap.Int("metrics", metrics), zap.Int("status", resp.StatusCode))
 	}
+
+	return nil
 }
 
 // Start запускает периодический сбор и отправку метрик.
@@ -208,7 +224,7 @@ func (a *Agent) Start(ctx context.Context) {
 		for {
 			select {
 			case <-reportTicker.C:
-				a.report()
+				a.report(ctx)
 			case <-ctx.Done():
 				return
 			}

@@ -1,8 +1,13 @@
 package agent
 
 import (
+	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	models "practice/internal/model"
@@ -99,7 +104,7 @@ func TestReport(t *testing.T) {
 
 	agent := NewAgent(time.Second, time.Second, srv.URL)
 	agent.CollectMetrics()
-	agent.report()
+	agent.report(context.Background())
 
 	mu.Lock()
 	gotRequests := requests
@@ -177,7 +182,7 @@ func TestReportSkipsEmptyBatch(t *testing.T) {
 	defer srv.Close()
 
 	agent := NewAgent(time.Second, time.Second, srv.URL)
-	agent.report()
+	agent.report(context.Background())
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -247,7 +252,7 @@ func TestReportConcurrentWithCollect(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < rounds; i++ {
-			agent.report()
+			agent.report(context.Background())
 		}
 	}()
 	wg.Wait()
@@ -256,5 +261,111 @@ func TestReportConcurrentWithCollect(t *testing.T) {
 	defer mu.Unlock()
 	if batches != rounds {
 		t.Errorf("batches = %d, want %d", batches, rounds)
+	}
+}
+
+type stubTransport struct {
+	failures int
+	onCall   func()
+
+	mu     sync.Mutex
+	calls  int
+	bodies [][]byte
+}
+
+func (t *stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	req.Body.Close()
+
+	t.mu.Lock()
+	t.calls++
+	call := t.calls
+	t.bodies = append(t.bodies, body)
+	t.mu.Unlock()
+
+	if t.onCall != nil {
+		t.onCall()
+	}
+
+	if call <= t.failures {
+		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}
+	}
+
+	return &http.Response{
+		Status:     "200 OK",
+		StatusCode: http.StatusOK,
+		Proto:      "HTTP/1.1",
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader(nil)),
+		Request:    req,
+	}, nil
+}
+
+func TestSendBatchRetriesTransportFailure(t *testing.T) {
+	tr := &stubTransport{failures: 2}
+
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid")
+	agent.client = &http.Client{Transport: tr}
+	agent.retryDelays = []time.Duration{0, 0, 0}
+
+	agent.CollectMetrics()
+	agent.report(context.Background())
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.calls != 3 {
+		t.Fatalf("attempts = %d, want 3: две неудачные попытки и успешная третья", tr.calls)
+	}
+	if !bytes.Equal(tr.bodies[0], tr.bodies[2]) {
+		t.Error("повтор обязан отправлять тот же снимок метрик, что и первая попытка")
+	}
+
+	zr, err := gzip.NewReader(bytes.NewReader(tr.bodies[2]))
+	if err != nil {
+		t.Fatalf("тело успешной попытки не является gzip: %v", err)
+	}
+	defer zr.Close()
+
+	var batch []models.Metrics
+	if err := json.NewDecoder(zr).Decode(&batch); err != nil {
+		t.Fatalf("decode batch: %v", err)
+	}
+
+	var hasAlloc, hasPollCount bool
+	for _, m := range batch {
+		switch m.ID {
+		case "Alloc":
+			hasAlloc = m.Value != nil
+		case "PollCount":
+			hasPollCount = m.Delta != nil
+		}
+	}
+	if !hasAlloc || !hasPollCount {
+		t.Errorf("батч успешной попытки неполон: Alloc=%v, PollCount=%v", hasAlloc, hasPollCount)
+	}
+}
+
+func TestSendBatchStopsWhenContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tr := &stubTransport{failures: 100, onCall: cancel}
+
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid")
+	agent.client = &http.Client{Transport: tr}
+	agent.retryDelays = []time.Duration{30 * time.Second, 30 * time.Second, 30 * time.Second}
+
+	agent.CollectMetrics()
+	agent.report(ctx)
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.calls != 1 {
+		t.Errorf("attempts = %d, want 1: отмена контекста обрывает серию повторов", tr.calls)
 	}
 }

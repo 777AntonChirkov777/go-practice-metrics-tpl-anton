@@ -23,6 +23,7 @@ require (
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/creasty/defaults v1.8.0
 	github.com/go-chi/chi/v5 v5.3.0
+	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/pressly/goose/v3 v3.15.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/zap v1.27.0
