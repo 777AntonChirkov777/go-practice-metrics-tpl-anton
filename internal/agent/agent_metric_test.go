@@ -266,11 +266,22 @@ func TestReportConcurrentWithCollect(t *testing.T) {
 
 type stubTransport struct {
 	failures int
+	statuses []int
 	onCall   func()
 
 	mu     sync.Mutex
 	calls  int
 	bodies [][]byte
+}
+
+func (t *stubTransport) statusFor(call int) int {
+	if len(t.statuses) == 0 {
+		return http.StatusOK
+	}
+	if call > len(t.statuses) {
+		return t.statuses[len(t.statuses)-1]
+	}
+	return t.statuses[call-1]
 }
 
 func (t *stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -294,14 +305,88 @@ func (t *stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}
 	}
 
+	status := t.statusFor(call)
+
 	return &http.Response{
-		Status:     "200 OK",
-		StatusCode: http.StatusOK,
+		Status:     http.StatusText(status),
+		StatusCode: status,
 		Proto:      "HTTP/1.1",
 		Header:     make(http.Header),
 		Body:       io.NopCloser(bytes.NewReader(nil)),
 		Request:    req,
 	}, nil
+}
+
+func TestSendBatchRetriesServerError(t *testing.T) {
+	tr := &stubTransport{statuses: []int{
+		http.StatusInternalServerError,
+		http.StatusInternalServerError,
+		http.StatusOK,
+	}}
+
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid")
+	agent.client = &http.Client{Transport: tr}
+	agent.retryDelays = []time.Duration{0, 0, 0}
+
+	agent.CollectMetrics()
+	agent.report(context.Background())
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.calls != 3 {
+		t.Fatalf("attempts = %d, want 3: две пятисотки и успешная третья попытка", tr.calls)
+	}
+	if !bytes.Equal(tr.bodies[0], tr.bodies[2]) {
+		t.Error("повтор обязан отправлять тот же снимок метрик, что и первая попытка")
+	}
+}
+
+func TestSendBatchDoesNotRetryClientError(t *testing.T) {
+	tr := &stubTransport{statuses: []int{http.StatusBadRequest}}
+
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid")
+	agent.client = &http.Client{Transport: tr}
+	agent.retryDelays = []time.Duration{0, 0, 0}
+
+	agent.CollectMetrics()
+	agent.report(context.Background())
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.calls != 1 {
+		t.Errorf("attempts = %d, want 1: ответ 400 повторять бессмысленно", tr.calls)
+	}
+}
+
+func TestSendBatchDoesNotRetryUnbuildableRequest(t *testing.T) {
+	tr := &stubTransport{}
+
+	agent := NewAgent(time.Second, time.Second, "http://\x7f")
+	agent.client = &http.Client{Transport: tr}
+	agent.retryDelays = []time.Duration{time.Hour, time.Hour, time.Hour}
+
+	agent.CollectMetrics()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		agent.report(context.Background())
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("отправка выдерживает паузу: ошибка построения запроса ушла в повтор")
+	}
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.calls != 0 {
+		t.Errorf("transport calls = %d, want 0: запрос не был построен", tr.calls)
+	}
 }
 
 func TestSendBatchRetriesTransportFailure(t *testing.T) {

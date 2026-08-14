@@ -158,10 +158,9 @@ func (a *Agent) sendBatch(ctx context.Context, batch []models.Metrics) {
 		return
 	}
 
-	err = retry.Do(ctx, "agent.sendBatch", a.retryDelays,
-		func(error) bool { return ctx.Err() == nil },
+	err = retry.Do(ctx, "agent.sendBatch", a.retryDelays, isRetriable,
 		func(ctx context.Context) error {
-			return a.postBatch(ctx, url, body, len(batch))
+			return a.postBatch(ctx, url, body)
 		})
 	if err != nil {
 		logger.Log.Info("send batch failed",
@@ -169,7 +168,7 @@ func (a *Agent) sendBatch(ctx context.Context, batch []models.Metrics) {
 	}
 }
 
-func (a *Agent) postBatch(ctx context.Context, url string, body []byte, metrics int) error {
+func (a *Agent) postBatch(ctx context.Context, url string, body []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -186,9 +185,8 @@ func (a *Agent) postBatch(ctx context.Context, url string, body []byte, metrics 
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		logger.Log.Info("unexpected response status",
-			zap.Int("metrics", metrics), zap.Int("status", resp.StatusCode))
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return &statusError{code: resp.StatusCode}
 	}
 
 	return nil

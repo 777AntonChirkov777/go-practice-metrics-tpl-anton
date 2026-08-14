@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultDelays - интервалы между повторами: 1s, 3s, 5s
 var DefaultDelays = []time.Duration{time.Second, 3 * time.Second, 5 * time.Second}
 
 func Do(
@@ -35,6 +36,10 @@ func Do(
 			return err
 		}
 
+		if ctx.Err() != nil {
+			return err
+		}
+
 		err = fn(ctx)
 	}
 
@@ -42,10 +47,6 @@ func Do(
 }
 
 func wait(ctx context.Context, d time.Duration) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 
