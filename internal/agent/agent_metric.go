@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"practice/internal/hash"
 	"practice/internal/logger"
 	models "practice/internal/model"
 	"practice/internal/retry"
@@ -24,6 +25,7 @@ type Agent struct {
 	pollInterval   time.Duration
 	reportInterval time.Duration
 	serverURL      string
+	key            string
 	client         *http.Client
 	retryDelays    []time.Duration
 	mu             sync.Mutex
@@ -34,11 +36,12 @@ type Agent struct {
 }
 
 // NewAgent создает новый экземпляр агента.
-func NewAgent(pollInterval, reportInterval time.Duration, serverURL string) *Agent {
+func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string) *Agent {
 	return &Agent{
 		pollInterval:   pollInterval,
 		reportInterval: reportInterval,
 		serverURL:      serverURL,
+		key:            key,
 		client:         &http.Client{Timeout: 5 * time.Second},
 		retryDelays:    retry.DefaultDelays,
 		gauges:         make(map[string]float64),
@@ -151,6 +154,8 @@ func (a *Agent) sendBatch(ctx context.Context, batch []models.Metrics) {
 		return
 	}
 
+	sign := a.sign(body)
+
 	body, err = gzipJSON(body)
 	if err != nil {
 		logger.Log.Info("gzip batch failed",
@@ -160,7 +165,7 @@ func (a *Agent) sendBatch(ctx context.Context, batch []models.Metrics) {
 
 	err = retry.Do(ctx, "agent.sendBatch", a.retryDelays, isRetriable,
 		func(ctx context.Context) error {
-			return a.postBatch(ctx, url, body)
+			return a.postBatch(ctx, url, body, sign)
 		})
 	if err != nil {
 		logger.Log.Info("send batch failed",
@@ -168,7 +173,7 @@ func (a *Agent) sendBatch(ctx context.Context, batch []models.Metrics) {
 	}
 }
 
-func (a *Agent) postBatch(ctx context.Context, url string, body []byte) error {
+func (a *Agent) postBatch(ctx context.Context, url string, body []byte, sign string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -177,6 +182,9 @@ func (a *Agent) postBatch(ctx context.Context, url string, body []byte) error {
 	// упаковано на проводе. Оба заголовка обязательны.
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
+	if sign != "" {
+		req.Header.Set(hash.Header, sign)
+	}
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -190,6 +198,14 @@ func (a *Agent) postBatch(ctx context.Context, url string, body []byte) error {
 	}
 
 	return nil
+}
+
+func (a *Agent) sign(body []byte) string {
+	if a.key == "" {
+		return ""
+	}
+
+	return hash.Sum(a.key, body)
 }
 
 // Start запускает периодический сбор и отправку метрик.

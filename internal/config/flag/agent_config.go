@@ -12,6 +12,7 @@ type AgentConfigFlag struct {
 	Address        string
 	ReportInterval time.Duration
 	PollInterval   time.Duration
+	Key            string
 }
 
 // ParseAgentFlags обрабатывает аргументы командной строки для агента.
@@ -24,8 +25,9 @@ func ParseAgentFlags(args []string) *AgentConfigFlag {
 	fs.StringVar(&cfg.Address, "a", "localhost:8080", "адрес HTTP-эндпоинта сервера")
 	fs.IntVar(&reportSec, "r", 10, "частота отправки метрик на сервер (в секундах)")
 	fs.IntVar(&pollSec, "p", 2, "частота опроса метрик runtime (в секундах)")
+	fs.StringVar(&cfg.Key, "k", "", "ключ подписи HashSHA256")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Агент: %s -a=<адрес> -r=<сек> -p=<сек>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Агент: %s -a=<адрес> -r=<сек> -p=<сек> -k=<ключ>\n", os.Args[0])
 		fs.PrintDefaults()
 	}
 

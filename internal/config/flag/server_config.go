@@ -11,6 +11,7 @@ type ServerConfigFlag struct {
 	FileStoragePath string
 	Restore         bool
 	DatabaseDSN     string
+	Key             string
 }
 
 func ParseServerFlags(args []string) (*ServerConfigFlag, error) {
@@ -22,6 +23,7 @@ func ParseServerFlags(args []string) (*ServerConfigFlag, error) {
 	fs.StringVar(&cfg.FileStoragePath, "f", "metrics-db.json", "путь до файла, куда сохраняются метрики")
 	fs.BoolVar(&cfg.Restore, "r", true, "загружать ли сохранённые метрики при старте")
 	fs.StringVar(&cfg.DatabaseDSN, "d", "", "строка подключения к базе данных")
+	fs.StringVar(&cfg.Key, "k", "", "ключ подписи HashSHA256")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("не удалось разобрать флаги: %w", err)

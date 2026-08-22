@@ -12,6 +12,7 @@ type AgentConfig struct {
 	Address        string        `default:"localhost:8080"`
 	ReportInterval time.Duration `default:"30s"`
 	PollInterval   time.Duration `default:"5s"`
+	Key            string
 }
 
 func GetAgentConfig(args []string) (*AgentConfig, error) {
@@ -25,6 +26,7 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 		cfg.Address = flagCfg.Address
 		cfg.PollInterval = flagCfg.PollInterval
 		cfg.ReportInterval = flagCfg.ReportInterval
+		cfg.Key = flagCfg.Key
 	}
 
 	if evnCfg := env.GetAgentConfigEnv(); evnCfg != nil {
@@ -36,6 +38,9 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 		}
 		if evnCfg.PollInterval != 0 {
 			cfg.PollInterval = time.Duration(evnCfg.PollInterval) * time.Second
+		}
+		if evnCfg.Key != "" {
+			cfg.Key = evnCfg.Key
 		}
 	}
 

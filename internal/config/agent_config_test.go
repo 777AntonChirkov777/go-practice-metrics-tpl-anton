@@ -10,6 +10,7 @@ func clearAgentEnv(t *testing.T) {
 	t.Setenv("ADDRESS", "")
 	t.Setenv("REPORT_INTERVAL", "")
 	t.Setenv("POLL_INTERVAL", "")
+	t.Setenv("KEY", "")
 }
 
 func TestGetAgentConfig_AddressFromEnvOnly(t *testing.T) {
@@ -91,5 +92,55 @@ func TestGetAgentConfig_FullEnv(t *testing.T) {
 	}
 	if cfg.PollInterval != 6*time.Second {
 		t.Errorf("PollInterval = %v, want 6s", cfg.PollInterval)
+	}
+}
+
+func TestGetAgentConfig_KeyFromFlag(t *testing.T) {
+	clearAgentEnv(t)
+
+	cfg, err := GetAgentConfig([]string{"-k=secret"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Key != "secret" {
+		t.Errorf("Key = %q, want secret", cfg.Key)
+	}
+}
+
+func TestGetAgentConfig_KeyFromEnvOnly(t *testing.T) {
+	clearAgentEnv(t)
+	t.Setenv("KEY", "secret")
+
+	cfg, err := GetAgentConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Key != "secret" {
+		t.Errorf("Key = %q, want secret", cfg.Key)
+	}
+}
+
+func TestGetAgentConfig_EnvKeyOverridesFlag(t *testing.T) {
+	clearAgentEnv(t)
+	t.Setenv("KEY", "secret")
+
+	cfg, err := GetAgentConfig([]string{"-k=invalidkey"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Key != "secret" {
+		t.Errorf("Key = %q, want secret: окружение обязано перекрывать флаг -k", cfg.Key)
+	}
+}
+
+func TestGetAgentConfig_NoKey(t *testing.T) {
+	clearAgentEnv(t)
+
+	cfg, err := GetAgentConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Key != "" {
+		t.Errorf("Key = %q, want empty", cfg.Key)
 	}
 }
