@@ -19,6 +19,7 @@ import (
 	"practice/internal/dbstore"
 	"practice/internal/filestore"
 	handlers "practice/internal/handler"
+	"practice/internal/hash"
 	"practice/internal/logger"
 	"practice/internal/storage"
 	"practice/migrations"
@@ -68,6 +69,7 @@ func run() error {
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger)
 	r.Use(compress.Middleware)
+	r.Use(hash.Middleware(cfg.Key))
 	r.Get("/", h.ListHandler)
 
 	r.Post("/update", h.UpdateJSONHandler)

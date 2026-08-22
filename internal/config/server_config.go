@@ -15,6 +15,7 @@ type ServerConfig struct {
 	FileStoragePath string        `default:"metrics-db.json"`
 	Restore         bool          `default:"true"`
 	DatabaseDSN     string
+	Key             string
 }
 
 func GetServerConfig(args []string) (*ServerConfig, error) {
@@ -35,6 +36,7 @@ func GetServerConfig(args []string) (*ServerConfig, error) {
 	cfg.FileStoragePath = flagCfg.FileStoragePath
 	cfg.Restore = flagCfg.Restore
 	cfg.DatabaseDSN = flagCfg.DatabaseDSN
+	cfg.Key = flagCfg.Key
 
 	// Слой окружения. Переопределяем только присутствующие (не-nil) поля.
 	envCfg, err := env.GetServerConfigEnv()
@@ -55,6 +57,9 @@ func GetServerConfig(args []string) (*ServerConfig, error) {
 	}
 	if envCfg.DatabaseDSN != nil && *envCfg.DatabaseDSN != "" {
 		cfg.DatabaseDSN = *envCfg.DatabaseDSN
+	}
+	if envCfg.Key != nil && *envCfg.Key != "" {
+		cfg.Key = *envCfg.Key
 	}
 
 	return cfg, nil

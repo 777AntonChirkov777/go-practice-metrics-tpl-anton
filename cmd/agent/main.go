@@ -35,12 +35,14 @@ func main() {
 		zap.String("server_address", acfg.Address),
 		zap.Duration("report_interval", acfg.ReportInterval),
 		zap.Duration("poll_interval", acfg.PollInterval),
+		zap.Bool("signing", acfg.Key != ""),
 	)
 
 	agent := agent.NewAgent(
 		acfg.PollInterval,
 		acfg.ReportInterval,
 		"http://"+acfg.Address,
+		acfg.Key,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

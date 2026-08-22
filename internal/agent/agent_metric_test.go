@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"practice/internal/hash"
 	models "practice/internal/model"
 	"sync"
 	"testing"
@@ -17,7 +18,7 @@ import (
 )
 
 func TestCollectMetrics(t *testing.T) {
-	agent := NewAgent(time.Second, time.Second, "http://localhost")
+	agent := NewAgent(time.Second, time.Second, "http://localhost", "")
 	agent.CollectMetrics()
 
 	gauges, pollCount := agent.GetMetrics()
@@ -102,7 +103,7 @@ func TestReport(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	agent := NewAgent(time.Second, time.Second, srv.URL)
+	agent := NewAgent(time.Second, time.Second, srv.URL, "")
 	agent.CollectMetrics()
 	agent.report(context.Background())
 
@@ -181,7 +182,7 @@ func TestReportSkipsEmptyBatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	agent := NewAgent(time.Second, time.Second, srv.URL)
+	agent := NewAgent(time.Second, time.Second, srv.URL, "")
 	agent.report(context.Background())
 
 	mu.Lock()
@@ -236,7 +237,7 @@ func TestReportConcurrentWithCollect(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	agent := NewAgent(time.Second, time.Second, srv.URL)
+	agent := NewAgent(time.Second, time.Second, srv.URL, "")
 	agent.CollectMetrics()
 
 	const rounds = 50
@@ -269,9 +270,10 @@ type stubTransport struct {
 	statuses []int
 	onCall   func()
 
-	mu     sync.Mutex
-	calls  int
-	bodies [][]byte
+	mu      sync.Mutex
+	calls   int
+	bodies  [][]byte
+	headers []http.Header
 }
 
 func (t *stubTransport) statusFor(call int) int {
@@ -295,6 +297,7 @@ func (t *stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.calls++
 	call := t.calls
 	t.bodies = append(t.bodies, body)
+	t.headers = append(t.headers, req.Header.Clone())
 	t.mu.Unlock()
 
 	if t.onCall != nil {
@@ -324,7 +327,7 @@ func TestSendBatchRetriesServerError(t *testing.T) {
 		http.StatusOK,
 	}}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid")
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "")
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{0, 0, 0}
 
@@ -345,7 +348,7 @@ func TestSendBatchRetriesServerError(t *testing.T) {
 func TestSendBatchDoesNotRetryClientError(t *testing.T) {
 	tr := &stubTransport{statuses: []int{http.StatusBadRequest}}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid")
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "")
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{0, 0, 0}
 
@@ -363,7 +366,7 @@ func TestSendBatchDoesNotRetryClientError(t *testing.T) {
 func TestSendBatchDoesNotRetryUnbuildableRequest(t *testing.T) {
 	tr := &stubTransport{}
 
-	agent := NewAgent(time.Second, time.Second, "http://\x7f")
+	agent := NewAgent(time.Second, time.Second, "http://\x7f", "")
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{time.Hour, time.Hour, time.Hour}
 
@@ -392,7 +395,7 @@ func TestSendBatchDoesNotRetryUnbuildableRequest(t *testing.T) {
 func TestSendBatchRetriesTransportFailure(t *testing.T) {
 	tr := &stubTransport{failures: 2}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid")
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "")
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{0, 0, 0}
 
@@ -440,7 +443,7 @@ func TestSendBatchStopsWhenContextCanceled(t *testing.T) {
 
 	tr := &stubTransport{failures: 100, onCall: cancel}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid")
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "")
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{30 * time.Second, 30 * time.Second, 30 * time.Second}
 
@@ -452,5 +455,91 @@ func TestSendBatchStopsWhenContextCanceled(t *testing.T) {
 
 	if tr.calls != 1 {
 		t.Errorf("attempts = %d, want 1: отмена контекста обрывает серию повторов", tr.calls)
+	}
+}
+
+func gunzipBody(t *testing.T, body []byte) []byte {
+	t.Helper()
+
+	zr, err := gzip.NewReader(bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("тело не является gzip: %v", err)
+	}
+	defer zr.Close()
+
+	plain, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatalf("не удалось распаковать тело: %v", err)
+	}
+
+	return plain
+}
+
+func TestSendBatchSignsUncompressedBody(t *testing.T) {
+	tr := &stubTransport{}
+
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "secret")
+	agent.client = &http.Client{Transport: tr}
+
+	agent.CollectMetrics()
+	agent.report(context.Background())
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.calls != 1 {
+		t.Fatalf("calls = %d, want 1", tr.calls)
+	}
+
+	want := hash.Sum("secret", gunzipBody(t, tr.bodies[0]))
+	if got := tr.headers[0].Get(hash.Header); got != want {
+		t.Errorf("%s = %q, want %q: подпись считается от несжатого тела", hash.Header, got, want)
+	}
+}
+
+func TestSendBatchWithoutKeyIsUnsigned(t *testing.T) {
+	tr := &stubTransport{}
+
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "")
+	agent.client = &http.Client{Transport: tr}
+
+	agent.CollectMetrics()
+	agent.report(context.Background())
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.calls != 1 {
+		t.Fatalf("calls = %d, want 1", tr.calls)
+	}
+	if got := tr.headers[0].Get(hash.Header); got != "" {
+		t.Errorf("%s = %q, want empty: без ключа подписи нет", hash.Header, got)
+	}
+}
+
+func TestSendBatchRetryKeepsSignature(t *testing.T) {
+	tr := &stubTransport{statuses: []int{
+		http.StatusInternalServerError,
+		http.StatusOK,
+	}}
+
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "secret")
+	agent.client = &http.Client{Transport: tr}
+	agent.retryDelays = []time.Duration{0, 0, 0}
+
+	agent.CollectMetrics()
+	agent.report(context.Background())
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.calls != 2 {
+		t.Fatalf("calls = %d, want 2", tr.calls)
+	}
+	if !bytes.Equal(tr.bodies[0], tr.bodies[1]) {
+		t.Error("повтор обязан отправлять то же тело")
+	}
+	if tr.headers[0].Get(hash.Header) != tr.headers[1].Get(hash.Header) {
+		t.Error("повтор обязан отправлять ту же подпись, что и первая попытка")
 	}
 }

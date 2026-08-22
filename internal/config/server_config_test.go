@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var serverEnvKeys = []string{"ADDRESS", "STORE_INTERVAL", "FILE_STORAGE_PATH", "RESTORE", "DATABASE_DSN"}
+var serverEnvKeys = []string{"ADDRESS", "STORE_INTERVAL", "FILE_STORAGE_PATH", "RESTORE", "DATABASE_DSN", "KEY"}
 
 func resetServerEnv(t *testing.T) {
 	t.Helper()
@@ -202,5 +202,55 @@ func TestGetServerConfig_EnvOnlyLikeAutotest(t *testing.T) {
 	}
 	if cfg.DatabaseDSN != "postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable" {
 		t.Errorf("DatabaseDSN = %q, want value from env", cfg.DatabaseDSN)
+	}
+}
+
+func TestGetServerConfig_KeyFromFlag(t *testing.T) {
+	resetServerEnv(t)
+
+	cfg, err := GetServerConfig([]string{"-k=secret"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Key != "secret" {
+		t.Errorf("Key = %q, want secret", cfg.Key)
+	}
+}
+
+func TestGetServerConfig_KeyFromEnvOnly(t *testing.T) {
+	resetServerEnv(t)
+	t.Setenv("KEY", "secret")
+
+	cfg, err := GetServerConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Key != "secret" {
+		t.Errorf("Key = %q, want secret", cfg.Key)
+	}
+}
+
+func TestGetServerConfig_EnvKeyOverridesFlag(t *testing.T) {
+	resetServerEnv(t)
+	t.Setenv("KEY", "secret")
+
+	cfg, err := GetServerConfig([]string{"-k=invalidkey"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Key != "secret" {
+		t.Errorf("Key = %q, want secret: окружение обязано перекрывать флаг -k", cfg.Key)
+	}
+}
+
+func TestGetServerConfig_NoKey(t *testing.T) {
+	resetServerEnv(t)
+
+	cfg, err := GetServerConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Key != "" {
+		t.Errorf("Key = %q, want empty", cfg.Key)
 	}
 }
