@@ -8,24 +8,33 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	model "practice/internal/model"
+	"practice/internal/retry"
 	"practice/internal/storage"
 )
 
 const upsertChunkSize = 1000
 
 type Storage struct {
-	db *sql.DB
+	db     *sql.DB
+	delays []time.Duration
 }
 
 var _ storage.MetricStorage = (*Storage)(nil)
 
 func New(db *sql.DB) *Storage {
-	return &Storage{db: db}
+	return &Storage{db: db, delays: retry.DefaultDelays}
 }
 
 func (s *Storage) Save(ctx context.Context, m *model.Metric) error {
+	return retry.Do(ctx, "dbstore.Save", s.delays, isRetriable, func(ctx context.Context) error {
+		return s.saveOnce(ctx, m)
+	})
+}
+
+func (s *Storage) saveOnce(ctx context.Context, m *model.Metric) error {
 	switch model.MetricType(m.MType) {
 	case model.Gauge:
 		_, err := s.db.ExecContext(ctx,
@@ -45,6 +54,12 @@ func (s *Storage) Save(ctx context.Context, m *model.Metric) error {
 }
 
 func (s *Storage) SaveBatch(ctx context.Context, metrics []*model.Metric) error {
+	return retry.Do(ctx, "dbstore.SaveBatch", s.delays, isRetriable, func(ctx context.Context) error {
+		return s.saveBatchOnce(ctx, metrics)
+	})
+}
+
+func (s *Storage) saveBatchOnce(ctx context.Context, metrics []*model.Metric) error {
 	gauges, counters, err := aggregate(metrics)
 	if err != nil {
 		return err
@@ -169,6 +184,21 @@ func valuePlaceholders(rows int) string {
 }
 
 func (s *Storage) Get(ctx context.Context, mtype model.MetricType, name string) (*model.Metric, error) {
+	var m *model.Metric
+
+	err := retry.Do(ctx, "dbstore.Get", s.delays, isRetriable, func(ctx context.Context) error {
+		var err error
+		m, err = s.getOnce(ctx, mtype, name)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return m, nil
+}
+
+func (s *Storage) getOnce(ctx context.Context, mtype model.MetricType, name string) (*model.Metric, error) {
 	switch mtype {
 	case model.Gauge:
 		var value float64
@@ -190,6 +220,21 @@ func (s *Storage) Get(ctx context.Context, mtype model.MetricType, name string) 
 }
 
 func (s *Storage) GetAll(ctx context.Context) ([]*model.Metric, error) {
+	var all []*model.Metric
+
+	err := retry.Do(ctx, "dbstore.GetAll", s.delays, isRetriable, func(ctx context.Context) error {
+		var err error
+		all, err = s.getAllOnce(ctx)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return all, nil
+}
+
+func (s *Storage) getAllOnce(ctx context.Context) ([]*model.Metric, error) {
 	gauges, err := s.allGauges(ctx)
 	if err != nil {
 		return nil, err
