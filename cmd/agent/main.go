@@ -36,6 +36,7 @@ func main() {
 		zap.Duration("report_interval", acfg.ReportInterval),
 		zap.Duration("poll_interval", acfg.PollInterval),
 		zap.Bool("signing", acfg.Key != ""),
+		zap.Int("rate_limit", acfg.RateLimit),
 	)
 
 	agent := agent.NewAgent(
@@ -43,6 +44,7 @@ func main() {
 		acfg.ReportInterval,
 		"http://"+acfg.Address,
 		acfg.Key,
+		acfg.RateLimit,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -13,6 +13,7 @@ type AgentConfig struct {
 	ReportInterval time.Duration `default:"30s"`
 	PollInterval   time.Duration `default:"5s"`
 	Key            string
+	RateLimit      int `default:"1"`
 }
 
 func GetAgentConfig(args []string) (*AgentConfig, error) {
@@ -27,6 +28,7 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 		cfg.PollInterval = flagCfg.PollInterval
 		cfg.ReportInterval = flagCfg.ReportInterval
 		cfg.Key = flagCfg.Key
+		cfg.RateLimit = flagCfg.RateLimit
 	}
 
 	if evnCfg := env.GetAgentConfigEnv(); evnCfg != nil {
@@ -41,6 +43,9 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 		}
 		if evnCfg.Key != "" {
 			cfg.Key = evnCfg.Key
+		}
+		if evnCfg.RateLimit != 0 {
+			cfg.RateLimit = evnCfg.RateLimit
 		}
 	}
 

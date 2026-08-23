@@ -13,6 +13,7 @@ type AgentConfigFlag struct {
 	ReportInterval time.Duration
 	PollInterval   time.Duration
 	Key            string
+	RateLimit      int
 }
 
 // ParseAgentFlags обрабатывает аргументы командной строки для агента.
@@ -26,8 +27,9 @@ func ParseAgentFlags(args []string) *AgentConfigFlag {
 	fs.IntVar(&reportSec, "r", 10, "частота отправки метрик на сервер (в секундах)")
 	fs.IntVar(&pollSec, "p", 2, "частота опроса метрик runtime (в секундах)")
 	fs.StringVar(&cfg.Key, "k", "", "ключ подписи HashSHA256")
+	fs.IntVar(&cfg.RateLimit, "l", 1, "предел одновременно исходящих запросов к серверу")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Агент: %s -a=<адрес> -r=<сек> -p=<сек> -k=<ключ>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Агент: %s -a=<адрес> -r=<сек> -p=<сек> -k=<ключ> -l=<число>\n", os.Args[0])
 		fs.PrintDefaults()
 	}
 
@@ -40,6 +42,12 @@ func ParseAgentFlags(args []string) *AgentConfigFlag {
 	if reportSec <= 0 || pollSec <= 0 {
 		fmt.Printf("Не получилось спарсить конфиг из флагов\n")
 		fmt.Printf("Причина: интервалы должны быть больше нуля\n")
+		return nil
+	}
+
+	if cfg.RateLimit <= 0 {
+		fmt.Printf("Не получилось спарсить конфиг из флагов\n")
+		fmt.Printf("Причина: предел одновременных запросов должен быть больше нуля\n")
 		return nil
 	}
 
