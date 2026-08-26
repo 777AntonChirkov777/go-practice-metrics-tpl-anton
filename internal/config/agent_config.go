@@ -3,9 +3,11 @@ package config
 import (
 	env "practice/internal/config/env"
 	flag "practice/internal/config/flag"
+	"practice/internal/logger"
 	"time"
 
 	"github.com/creasty/defaults"
+	"go.uber.org/zap"
 )
 
 type AgentConfig struct {
@@ -23,7 +25,10 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 		return nil, err
 	}
 
-	if flagCfg := flag.ParseAgentFlags(args); flagCfg != nil {
+	flagCfg, err := flag.ParseAgentFlags(args)
+	if err != nil {
+		logger.Log.Info("флаги агента не применены, действуют значения по умолчанию", zap.Error(err))
+	} else {
 		cfg.Address = flagCfg.Address
 		cfg.PollInterval = flagCfg.PollInterval
 		cfg.ReportInterval = flagCfg.ReportInterval
@@ -31,22 +36,35 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 		cfg.RateLimit = flagCfg.RateLimit
 	}
 
-	if evnCfg := env.GetAgentConfigEnv(); evnCfg != nil {
-		if evnCfg.Address != "" {
-			cfg.Address = evnCfg.Address
-		}
-		if evnCfg.ReportInterval != 0 {
-			cfg.ReportInterval = time.Duration(evnCfg.ReportInterval) * time.Second
-		}
-		if evnCfg.PollInterval != 0 {
-			cfg.PollInterval = time.Duration(evnCfg.PollInterval) * time.Second
-		}
-		if evnCfg.Key != "" {
-			cfg.Key = evnCfg.Key
-		}
-		if evnCfg.RateLimit != 0 {
-			cfg.RateLimit = evnCfg.RateLimit
-		}
+	envCfg, err := env.GetAgentConfigEnv()
+	if err != nil {
+		logger.Log.Info("переменные окружения агента не применены", zap.Error(err))
+		return cfg, nil
+	}
+
+	if envCfg.Address != "" {
+		cfg.Address = envCfg.Address
+	}
+	if envCfg.ReportInterval > 0 {
+		cfg.ReportInterval = time.Duration(envCfg.ReportInterval) * time.Second
+	} else if envCfg.ReportInterval < 0 {
+		logger.Log.Info("REPORT_INTERVAL не применён: значение должно быть больше нуля",
+			zap.Int("value", envCfg.ReportInterval))
+	}
+	if envCfg.PollInterval > 0 {
+		cfg.PollInterval = time.Duration(envCfg.PollInterval) * time.Second
+	} else if envCfg.PollInterval < 0 {
+		logger.Log.Info("POLL_INTERVAL не применён: значение должно быть больше нуля",
+			zap.Int("value", envCfg.PollInterval))
+	}
+	if envCfg.Key != "" {
+		cfg.Key = envCfg.Key
+	}
+	if envCfg.RateLimit > 0 {
+		cfg.RateLimit = envCfg.RateLimit
+	} else if envCfg.RateLimit < 0 {
+		logger.Log.Info("RATE_LIMIT не применён: значение должно быть больше нуля",
+			zap.Int("value", envCfg.RateLimit))
 	}
 
 	return cfg, nil

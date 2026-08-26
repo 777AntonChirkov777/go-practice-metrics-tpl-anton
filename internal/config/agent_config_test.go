@@ -1,8 +1,14 @@
 package config
 
 import (
+	"practice/internal/logger"
+	"strings"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func clearAgentEnv(t *testing.T) {
@@ -213,5 +219,112 @@ func TestGetAgentConfig_NonPositiveRateLimitRejectsFlags(t *testing.T) {
 		if cfg.ReportInterval != 30*time.Second {
 			t.Errorf("%s: ReportInterval = %v, want 30s", arg, cfg.ReportInterval)
 		}
+	}
+}
+
+func TestGetAgentConfig_NegativeRateLimitFromEnvIgnored(t *testing.T) {
+	clearAgentEnv(t)
+	t.Setenv("RATE_LIMIT", "-5")
+
+	cfg, err := GetAgentConfig([]string{"-l=3"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.RateLimit != 3 {
+		t.Errorf("RateLimit = %d, want 3: отрицательный RATE_LIMIT не должен перекрывать флаг", cfg.RateLimit)
+	}
+}
+
+func TestGetAgentConfig_NegativeRateLimitFromEnvKeepsDefault(t *testing.T) {
+	clearAgentEnv(t)
+	t.Setenv("RATE_LIMIT", "-5")
+
+	cfg, err := GetAgentConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.RateLimit < 1 {
+		t.Errorf("RateLimit = %d, want >= 1: агент обязан получать валидный предел", cfg.RateLimit)
+	}
+}
+
+func TestGetAgentConfig_NegativeIntervalsFromEnvIgnored(t *testing.T) {
+	clearAgentEnv(t)
+	t.Setenv("REPORT_INTERVAL", "-1")
+	t.Setenv("POLL_INTERVAL", "-1")
+
+	cfg, err := GetAgentConfig([]string{"-r=7", "-p=4"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.ReportInterval != 7*time.Second {
+		t.Errorf("ReportInterval = %v, want 7s: отрицательный REPORT_INTERVAL не должен перекрывать флаг", cfg.ReportInterval)
+	}
+	if cfg.PollInterval != 4*time.Second {
+		t.Errorf("PollInterval = %v, want 4s: отрицательный POLL_INTERVAL не должен перекрывать флаг", cfg.PollInterval)
+	}
+}
+
+func withObservedLog(t *testing.T) *observer.ObservedLogs {
+	t.Helper()
+
+	core, logs := observer.New(zapcore.InfoLevel)
+	prev := logger.Log
+	logger.Log = zap.New(core)
+	t.Cleanup(func() { logger.Log = prev })
+
+	return logs
+}
+
+func TestGetAgentConfig_RejectedFlagsAreLogged(t *testing.T) {
+	clearAgentEnv(t)
+	logs := withObservedLog(t)
+
+	cfg, err := GetAgentConfig([]string{"-a=localhost:9999", "-l=0"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.RateLimit != 1 {
+		t.Errorf("RateLimit = %d, want 1", cfg.RateLimit)
+	}
+
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("записей в логе %d, want 1: %+v", len(entries), entries)
+	}
+
+	entry := entries[0]
+	if entry.Level != zapcore.InfoLevel {
+		t.Errorf("level = %v, want info", entry.Level)
+	}
+
+	reason, ok := entry.ContextMap()["error"].(string)
+	if !ok {
+		t.Fatalf("в записи нет структурированного поля error: %+v", entry.ContextMap())
+	}
+	if !strings.Contains(reason, "-l=0") {
+		t.Errorf("error = %q: причина отказа должна называть отвергнутое значение", reason)
+	}
+}
+
+func TestGetAgentConfig_NegativeEnvRateLimitIsLogged(t *testing.T) {
+	clearAgentEnv(t)
+	t.Setenv("RATE_LIMIT", "-5")
+	logs := withObservedLog(t)
+
+	cfg, err := GetAgentConfig([]string{"-l=3"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.RateLimit != 3 {
+		t.Errorf("RateLimit = %d, want 3", cfg.RateLimit)
+	}
+
+	entries := logs.FilterMessageSnippet("RATE_LIMIT").All()
+	if len(entries) != 1 {
+		t.Fatalf("записей про RATE_LIMIT %d, want 1: %+v", len(entries), logs.All())
+	}
+	if got := entries[0].ContextMap()["value"]; got != int64(-5) {
+		t.Errorf("value = %v (%T), want -5: в логе должно быть отвергнутое значение", got, got)
 	}
 }

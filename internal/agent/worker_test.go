@@ -102,7 +102,7 @@ func TestWorkerPoolLimitsConcurrentRequests(t *testing.T) {
 	}
 }
 
-func TestDispatchSkipsReportWhileWorkerIsBusy(t *testing.T) {
+func TestDispatchQueuesReportWhileWorkerIsBusy(t *testing.T) {
 	var requests atomic.Int64
 
 	arrived := make(chan struct{}, 4)
@@ -136,25 +136,128 @@ func TestDispatchSkipsReportWhileWorkerIsBusy(t *testing.T) {
 		t.Fatal("воркер не начал отправку")
 	}
 
-	if agent.dispatch() {
-		t.Error("задание ушло, хотя единственный воркер занят")
+	if !agent.dispatch(ctx) {
+		t.Fatal("отчёт отброшен, хотя в очереди есть место")
 	}
 
-	if got := requests.Load(); got != 1 {
-		t.Errorf("requests = %d, want 1: пропущенный отчёт не должен уходить на сервер", got)
+	releaseAll()
+
+	select {
+	case <-arrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("отчёт из очереди не дошёл до сервера")
+	}
+
+	if got := requests.Load(); got != 2 {
+		t.Errorf("requests = %d, want 2: отчёт из очереди обязан уйти на сервер", got)
 	}
 
 	gauges, pollCount := agent.GetMetrics()
 	if pollCount < 1 {
-		t.Errorf("pollCount = %d, want >= 1: пропуск отчёта не должен терять состояние", pollCount)
+		t.Errorf("pollCount = %d, want >= 1: постановка в очередь не должна терять состояние", pollCount)
 	}
 	if _, ok := gauges["Alloc"]; !ok {
-		t.Error("пропуск отчёта не должен терять собранные метрики")
+		t.Error("постановка в очередь не должна терять собранные метрики")
+	}
+
+	cancel()
+	agent.Wait()
+}
+
+func TestDispatchWaitsWhenQueueIsFull(t *testing.T) {
+	arrived := make(chan struct{}, 4)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseAll := func() { releaseOnce.Do(func() { close(release) }) }
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		arrived <- struct{}{}
+		<-release
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	defer releaseAll()
+
+	agent := NewAgent(time.Hour, time.Hour, srv.URL, "", 1)
+	agent.CollectMetrics()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	agent.wg.Add(1)
+	go agent.runWorker(ctx)
+
+	agent.jobs <- agent.snapshot()
+
+	select {
+	case <-arrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("воркер не начал отправку")
+	}
+
+	if !agent.dispatch(ctx) {
+		t.Fatal("отчёт отброшен, хотя в очереди есть место")
+	}
+
+	queued := make(chan bool, 1)
+	go func() { queued <- agent.dispatch(ctx) }()
+
+	select {
+	case <-queued:
+		t.Fatal("dispatch вернулся, хотя очередь заполнена, а единственный воркер занят")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	_, before := agent.GetMetrics()
+	agent.CollectMetrics()
+	_, after := agent.GetMetrics()
+	if after <= before {
+		t.Errorf("pollCount = %d, было %d: сбор обязан продолжаться, пока отправка ждёт воркера", after, before)
 	}
 
 	releaseAll()
+
+	select {
+	case ok := <-queued:
+		if !ok {
+			t.Error("dispatch вернул false, хотя воркер освободился")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("dispatch не разблокировался после освобождения воркера")
+	}
+
 	cancel()
 	agent.Wait()
+}
+
+func TestDispatchStopsWaitingOnCancel(t *testing.T) {
+	agent := NewAgent(time.Hour, time.Hour, "http://metrics.invalid", "", 1)
+	agent.CollectMetrics()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	agent.jobs <- agent.snapshot()
+
+	queued := make(chan bool, 1)
+	go func() { queued <- agent.dispatch(ctx) }()
+
+	select {
+	case <-queued:
+		t.Fatal("dispatch вернулся, хотя очередь заполнена и свободных воркеров нет")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	cancel()
+
+	select {
+	case ok := <-queued:
+		if ok {
+			t.Error("dispatch вернул true, хотя контекст отменён")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("dispatch не разблокировался после отмены контекста")
+	}
 }
 
 func TestStartStopsAllGoroutines(t *testing.T) {

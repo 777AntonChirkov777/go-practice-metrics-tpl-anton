@@ -18,14 +18,14 @@ func (a *Agent) runDispatcher(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			a.dispatch()
+			a.dispatch(ctx)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (a *Agent) dispatch() bool {
+func (a *Agent) dispatch(ctx context.Context) bool {
 	batch := a.snapshot()
 	if len(batch) == 0 {
 		return false
@@ -35,9 +35,16 @@ func (a *Agent) dispatch() bool {
 	case a.jobs <- batch:
 		return true
 	default:
-		logger.Log.Info("report skipped: all workers are busy",
-			zap.Int("metrics", len(batch)),
-			zap.Int("rate_limit", a.rateLimit))
+	}
+
+	logger.Log.Info("report waiting: all workers are busy",
+		zap.Int("metrics", len(batch)),
+		zap.Int("rate_limit", a.rateLimit))
+
+	select {
+	case a.jobs <- batch:
+		return true
+	case <-ctx.Done():
 		return false
 	}
 }

@@ -183,7 +183,7 @@ func TestReportSkipsEmptyBatch(t *testing.T) {
 	defer srv.Close()
 
 	agent := NewAgent(time.Second, time.Second, srv.URL, "", 1)
-	if agent.dispatch() {
+	if agent.dispatch(context.Background()) {
 		t.Error("пустой снимок не должен порождать задания воркеру")
 	}
 

@@ -7,8 +7,6 @@ import (
 	"os"
 	"os/signal"
 	agent "practice/internal/agent"
-
-	//configF "practice/internal/config/flag"
 	config "practice/internal/config"
 	"practice/internal/logger"
 	"syscall"
@@ -18,16 +16,16 @@ import (
 
 func main() {
 
+	// Уровень зафиксирован: по заданию все сообщения логгера — Info.
+	if err := logger.Initialize("info"); err != nil {
+		fmt.Fprintf(os.Stderr, "ошибка инициализации логгера: %v\n", err)
+		os.Exit(1)
+	}
+
 	acfg, err := config.GetAgentConfig(os.Args[1:])
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Уровень зафиксирован: по заданию все сообщения логгера — Info.
-	if err := logger.Initialize("info"); err != nil {
-		fmt.Fprintf(os.Stderr, "ошибка инициализации логгера: %v\n", err)
 		os.Exit(1)
 	}
 

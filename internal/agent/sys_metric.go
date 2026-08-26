@@ -2,8 +2,8 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"practice/internal/logger"
-	"strconv"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -49,6 +49,6 @@ func (a *Agent) collectSystemMetrics(ctx context.Context) {
 	a.gauges["TotalMemory"] = float64(vm.Total)
 	a.gauges["FreeMemory"] = float64(vm.Free)
 	for i, percent := range utilization {
-		a.gauges["CPUutilization"+strconv.Itoa(i+1)] = percent
+		a.gauges[fmt.Sprintf("CPUutilization%d", i+1)] = percent
 	}
 }

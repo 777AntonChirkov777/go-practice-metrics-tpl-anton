@@ -39,10 +39,6 @@ type Agent struct {
 
 // NewAgent создает новый экземпляр агента.
 func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string, rateLimit int) *Agent {
-	if rateLimit < 1 {
-		rateLimit = 1
-	}
-
 	return &Agent{
 		pollInterval:   pollInterval,
 		reportInterval: reportInterval,
@@ -51,7 +47,7 @@ func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string,
 		client:         &http.Client{Timeout: 5 * time.Second},
 		retryDelays:    retry.DefaultDelays,
 		rateLimit:      rateLimit,
-		jobs:           make(chan []models.Metrics),
+		jobs:           make(chan []models.Metrics, rateLimit),
 		gauges:         make(map[string]float64),
 	}
 }
@@ -208,13 +204,17 @@ func (a *Agent) Start(ctx context.Context) {
 	// Немедленный первый сбор метрик.
 	a.CollectMetrics()
 
-	a.wg.Add(3 + a.rateLimit)
-
+	a.wg.Add(1)
 	go a.runRuntimeCollector(ctx)
+
+	a.wg.Add(1)
 	go a.runSystemCollector(ctx)
+
+	a.wg.Add(1)
 	go a.runDispatcher(ctx)
 
 	for i := 0; i < a.rateLimit; i++ {
+		a.wg.Add(1)
 		go a.runWorker(ctx)
 	}
 }

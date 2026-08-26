@@ -17,12 +17,12 @@ type AgentConfigFlag struct {
 }
 
 // ParseAgentFlags обрабатывает аргументы командной строки для агента.
-func ParseAgentFlags(args []string) *AgentConfigFlag {
+func ParseAgentFlags(args []string) (*AgentConfigFlag, error) {
 	cfg := &AgentConfigFlag{}
 
 	var reportSec, pollSec int
 
-	fs := flag.NewFlagSet("agent", flag.ExitOnError)
+	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	fs.StringVar(&cfg.Address, "a", "localhost:8080", "адрес HTTP-эндпоинта сервера")
 	fs.IntVar(&reportSec, "r", 10, "частота отправки метрик на сервер (в секундах)")
 	fs.IntVar(&pollSec, "p", 2, "частота опроса метрик runtime (в секундах)")
@@ -34,25 +34,19 @@ func ParseAgentFlags(args []string) *AgentConfigFlag {
 	}
 
 	if err := fs.Parse(args); err != nil {
-		fmt.Printf("Не получилось спарсить конфиг из флагов\n")
-		fmt.Printf("Причина: %s\n", err.Error())
-		return nil
+		return nil, fmt.Errorf("не удалось разобрать флаги: %w", err)
 	}
 
 	if reportSec <= 0 || pollSec <= 0 {
-		fmt.Printf("Не получилось спарсить конфиг из флагов\n")
-		fmt.Printf("Причина: интервалы должны быть больше нуля\n")
-		return nil
+		return nil, fmt.Errorf("интервалы должны быть больше нуля: -r=%d, -p=%d", reportSec, pollSec)
 	}
 
 	if cfg.RateLimit <= 0 {
-		fmt.Printf("Не получилось спарсить конфиг из флагов\n")
-		fmt.Printf("Причина: предел одновременных запросов должен быть больше нуля\n")
-		return nil
+		return nil, fmt.Errorf("предел одновременных запросов должен быть больше нуля: -l=%d", cfg.RateLimit)
 	}
 
 	cfg.ReportInterval = time.Duration(reportSec) * time.Second
 	cfg.PollInterval = time.Duration(pollSec) * time.Second
 
-	return cfg
+	return cfg, nil
 }
