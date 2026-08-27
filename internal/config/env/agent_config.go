@@ -11,15 +11,14 @@ type AgentConfigEnv struct {
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	Key            string `env:"KEY"`
+	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
-func GetAgentConfigEnv() *AgentConfigEnv {
+func GetAgentConfigEnv() (*AgentConfigEnv, error) {
 	cfg := &AgentConfigEnv{}
 	if err := env.Parse(cfg); err != nil {
-		fmt.Printf("Не получилось спарсить конфиг из переменных окружения\n")
-		fmt.Printf("Причина: %s\n", err.Error())
-		return nil
+		return nil, fmt.Errorf("не удалось разобрать переменные окружения: %w", err)
 	}
 
-	return cfg
+	return cfg, nil
 }

@@ -28,6 +28,8 @@ type Agent struct {
 	key            string
 	client         *http.Client
 	retryDelays    []time.Duration
+	rateLimit      int
+	jobs           chan []models.Metrics
 	mu             sync.Mutex
 	gauges         map[string]float64
 	pollCount      int64
@@ -36,7 +38,7 @@ type Agent struct {
 }
 
 // NewAgent создает новый экземпляр агента.
-func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string) *Agent {
+func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string, rateLimit int) *Agent {
 	return &Agent{
 		pollInterval:   pollInterval,
 		reportInterval: reportInterval,
@@ -44,6 +46,8 @@ func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string)
 		key:            key,
 		client:         &http.Client{Timeout: 5 * time.Second},
 		retryDelays:    retry.DefaultDelays,
+		rateLimit:      rateLimit,
+		jobs:           make(chan []models.Metrics, rateLimit),
 		gauges:         make(map[string]float64),
 	}
 }
@@ -90,20 +94,6 @@ func (a *Agent) CollectMetrics() {
 	a.pollCount++
 	a.randomValue = rand.Float64()
 	a.gauges["RandomValue"] = a.randomValue
-}
-
-// report отправляет все собранные метрики на сервер.
-func (a *Agent) report(ctx context.Context) {
-	if ctx.Err() != nil {
-		return
-	}
-
-	batch := a.snapshot()
-	if len(batch) == 0 {
-		return
-	}
-
-	a.sendBatch(ctx, batch)
 }
 
 // snapshot копирует данные, чтобы не держать лок при HTTP-запросах.
@@ -214,36 +204,35 @@ func (a *Agent) Start(ctx context.Context) {
 	// Немедленный первый сбор метрик.
 	a.CollectMetrics()
 
-	pollTicker := time.NewTicker(a.pollInterval)
-	reportTicker := time.NewTicker(a.reportInterval)
+	a.wg.Add(1)
+	go a.runRuntimeCollector(ctx)
 
-	a.wg.Add(2)
+	a.wg.Add(1)
+	go a.runSystemCollector(ctx)
 
-	go func() {
-		defer a.wg.Done()
-		defer pollTicker.Stop()
-		for {
-			select {
-			case <-pollTicker.C:
-				a.CollectMetrics()
-			case <-ctx.Done():
-				return
-			}
+	a.wg.Add(1)
+	go a.runDispatcher(ctx)
+
+	for i := 0; i < a.rateLimit; i++ {
+		a.wg.Add(1)
+		go a.runWorker(ctx)
+	}
+}
+
+func (a *Agent) runRuntimeCollector(ctx context.Context) {
+	defer a.wg.Done()
+
+	ticker := time.NewTicker(a.pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			a.CollectMetrics()
+		case <-ctx.Done():
+			return
 		}
-	}()
-
-	go func() {
-		defer a.wg.Done()
-		defer reportTicker.Stop()
-		for {
-			select {
-			case <-reportTicker.C:
-				a.report(ctx)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	}
 }
 
 // GetMetrics возвращает копии текущих значений метрик (для тестирования).
