@@ -24,9 +24,9 @@ func TestSave_FileFormat(t *testing.T) {
 	path := tmpPath(t)
 	fs := New(path)
 
-	metrics := []*model.Metric{
-		model.NewGaugeMetric("LastGC", 1257894000000000000),
-		model.NewCountMetric("NumGC", 42),
+	metrics := []model.Metric{
+		*model.NewGaugeMetric("LastGC", 1257894000000000000),
+		*model.NewCountMetric("NumGC", 42),
 	}
 	if err := fs.save(metrics); err != nil {
 		t.Fatalf("Save error: %v", err)
@@ -79,7 +79,7 @@ func TestSave_ZeroGaugePresent(t *testing.T) {
 	path := tmpPath(t)
 	fs := New(path)
 
-	if err := fs.save([]*model.Metric{model.NewGaugeMetric("Zero", 0)}); err != nil {
+	if err := fs.save([]model.Metric{*model.NewGaugeMetric("Zero", 0)}); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
 
@@ -99,9 +99,9 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	path := tmpPath(t)
 	fs := New(path)
 
-	in := []*model.Metric{
-		model.NewGaugeMetric("Alloc", 12.5),
-		model.NewCountMetric("PollCount", 7),
+	in := []model.Metric{
+		*model.NewGaugeMetric("Alloc", 12.5),
+		*model.NewCountMetric("PollCount", 7),
 	}
 	if err := fs.save(in); err != nil {
 		t.Fatalf("Save error: %v", err)
@@ -183,7 +183,7 @@ func TestLoad_SkipsInvalidEntries(t *testing.T) {
 
 func TestSave_EmptyPathIsNoop(t *testing.T) {
 	fs := New("")
-	if err := fs.save([]*model.Metric{model.NewGaugeMetric("x", 1)}); err != nil {
+	if err := fs.save([]model.Metric{*model.NewGaugeMetric("x", 1)}); err != nil {
 		t.Errorf("empty path Save should be no-op, got %v", err)
 	}
 	out, err := fs.Load()
@@ -243,7 +243,7 @@ func TestSaveFrom_KeepsOrderWhenWriterIsDelayed(t *testing.T) {
 // Save создаёт промежуточные директории пути.
 func TestSave_CreatesDir(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "dir", "metrics.json")
-	if err := New(path).save([]*model.Metric{model.NewGaugeMetric("x", 1)}); err != nil {
+	if err := New(path).save([]model.Metric{*model.NewGaugeMetric("x", 1)}); err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
 	if _, err := os.Stat(path); err != nil {

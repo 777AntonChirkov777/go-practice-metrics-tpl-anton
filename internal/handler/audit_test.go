@@ -16,6 +16,8 @@ import (
 
 type discardAuditor struct{}
 
+func (discardAuditor) Enabled() bool { return false }
+
 func (discardAuditor) Record(_ []string, _ string) {}
 
 func firstAuditor(audit []Auditor) Auditor {
@@ -34,6 +36,8 @@ type auditCall struct {
 type auditRecorder struct {
 	calls []auditCall
 }
+
+func (a *auditRecorder) Enabled() bool { return true }
 
 func (a *auditRecorder) Record(metrics []string, ip string) {
 	a.calls = append(a.calls, auditCall{metrics: metrics, ip: ip})
