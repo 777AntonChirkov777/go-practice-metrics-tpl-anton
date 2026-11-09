@@ -10,7 +10,7 @@ import (
 
 func TestEvent_JSONShape(t *testing.T) {
 	body, err := json.Marshal(Event{
-		Ts:        12345678,
+		Timestamp: 12345678,
 		Metrics:   []string{"Alloc", "Frees"},
 		IPAddress: "192.168.0.42",
 	})

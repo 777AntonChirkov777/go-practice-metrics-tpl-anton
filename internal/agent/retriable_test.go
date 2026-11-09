@@ -85,7 +85,9 @@ func TestIsRetriable(t *testing.T) {
 }
 
 func TestIsRetriable_RequestBuildErrorIsPermanent(t *testing.T) {
-	_, err := url.Parse("http://\x7f/updates/")
+	rawURL := "http://" + string([]byte{0x7f}) + "/updates/"
+
+	_, err := url.Parse(rawURL)
 	if err == nil {
 		t.Fatal("ожидалась ошибка разбора адреса с управляющим символом")
 	}

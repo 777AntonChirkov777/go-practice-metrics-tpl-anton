@@ -42,7 +42,7 @@ func TestHTTPSink_PostsEventAsJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, sink.Notify(context.Background(), Event{
-		Ts: 12345678, Metrics: []string{"Alloc", "Frees"}, IPAddress: "192.168.0.42",
+		Timestamp: 12345678, Metrics: []string{"Alloc", "Frees"}, IPAddress: "192.168.0.42",
 	}))
 
 	received := <-got
@@ -63,7 +63,7 @@ func TestHTTPSink_NonSuccessStatusIsFailure(t *testing.T) {
 	sink, err := NewHTTPSink(srv.URL)
 	require.NoError(t, err)
 
-	assert.Error(t, sink.Notify(context.Background(), Event{Ts: 1, Metrics: []string{"Alloc"}}))
+	assert.Error(t, sink.Notify(context.Background(), Event{Timestamp: 1, Metrics: []string{"Alloc"}}))
 }
 
 func TestHTTPSink_RedirectIsFailure(t *testing.T) {
@@ -83,7 +83,7 @@ func TestHTTPSink_RedirectIsFailure(t *testing.T) {
 	sink, err := NewHTTPSink(srv.URL + "/audit")
 	require.NoError(t, err)
 
-	require.Error(t, sink.Notify(context.Background(), Event{Ts: 1, Metrics: []string{"Alloc"}}))
+	require.Error(t, sink.Notify(context.Background(), Event{Timestamp: 1, Metrics: []string{"Alloc"}}))
 
 	select {
 	case method := <-landed:
@@ -102,7 +102,7 @@ func TestHTTPSink_UnreachableReceiverIsFailure(t *testing.T) {
 	sink, err := NewHTTPSink(target)
 	require.NoError(t, err)
 
-	assert.Error(t, sink.Notify(context.Background(), Event{Ts: 1, Metrics: []string{"Alloc"}}))
+	assert.Error(t, sink.Notify(context.Background(), Event{Timestamp: 1, Metrics: []string{"Alloc"}}))
 }
 
 func TestHTTPSink_RejectsUnusableURL(t *testing.T) {

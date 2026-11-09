@@ -28,10 +28,10 @@ func TestFileSink_OneLinePerEvent(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, sink.Notify(context.Background(), Event{
-		Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "192.168.0.42",
+		Timestamp: 1, Metrics: []string{"Alloc"}, IPAddress: "192.168.0.42",
 	}))
 	require.NoError(t, sink.Notify(context.Background(), Event{
-		Ts: 2, Metrics: []string{"Frees", "PollCount"}, IPAddress: "10.0.0.7",
+		Timestamp: 2, Metrics: []string{"Frees", "PollCount"}, IPAddress: "10.0.0.7",
 	}))
 	require.NoError(t, sink.Close())
 
@@ -40,13 +40,13 @@ func TestFileSink_OneLinePerEvent(t *testing.T) {
 
 	var first Event
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &first))
-	assert.Equal(t, int64(1), first.Ts)
+	assert.Equal(t, int64(1), first.Timestamp)
 	assert.Equal(t, []string{"Alloc"}, first.Metrics)
 	assert.Equal(t, "192.168.0.42", first.IPAddress)
 
 	var second Event
 	require.NoError(t, json.Unmarshal([]byte(lines[1]), &second))
-	assert.Equal(t, int64(2), second.Ts)
+	assert.Equal(t, int64(2), second.Timestamp)
 	assert.Equal(t, []string{"Frees", "PollCount"}, second.Metrics)
 	assert.Equal(t, "10.0.0.7", second.IPAddress)
 }
@@ -59,7 +59,7 @@ func TestFileSink_AppendsToExistingFile(t *testing.T) {
 	sink, err := NewFileSink(path)
 	require.NoError(t, err)
 	require.NoError(t, sink.Notify(context.Background(), Event{
-		Ts: 2, Metrics: []string{"New"}, IPAddress: "10.0.0.7",
+		Timestamp: 2, Metrics: []string{"New"}, IPAddress: "10.0.0.7",
 	}))
 	require.NoError(t, sink.Close())
 

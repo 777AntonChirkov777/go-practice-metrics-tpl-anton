@@ -59,7 +59,7 @@ func (n *Notifier) Record(metrics []string, ip string) {
 	}
 
 	e := Event{
-		Ts:        time.Now().Unix(),
+		Timestamp: time.Now().Unix(),
 		Metrics:   append([]string(nil), metrics...),
 		IPAddress: ip,
 	}

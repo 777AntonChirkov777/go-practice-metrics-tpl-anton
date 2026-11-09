@@ -49,8 +49,8 @@ func TestNotifier_DeliversToEveryObserver(t *testing.T) {
 
 	assert.Equal(t, []string{"Alloc", "PollCount"}, first.events[0].Metrics)
 	assert.Equal(t, "192.168.0.42", first.events[0].IPAddress)
-	assert.GreaterOrEqual(t, first.events[0].Ts, before)
-	assert.LessOrEqual(t, first.events[0].Ts, after)
+	assert.GreaterOrEqual(t, first.events[0].Timestamp, before)
+	assert.LessOrEqual(t, first.events[0].Timestamp, after)
 	assert.Equal(t, first.events[0], second.events[0])
 
 	assert.True(t, first.closed)
