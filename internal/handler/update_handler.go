@@ -14,10 +14,11 @@ import (
 
 type Handler struct {
 	store storage.MetricStorage
+	audit Auditor
 }
 
-func NewHandler(store storage.MetricStorage) *Handler {
-	return &Handler{store: store}
+func NewHandler(store storage.MetricStorage, auditor Auditor) *Handler {
+	return &Handler{store: store, audit: auditor}
 }
 
 // POST /update/{type}/{name}/{value}
@@ -56,6 +57,8 @@ func (h *Handler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	h.audit.Record([]string{name}, clientIP(req))
 
 	res.WriteHeader(http.StatusOK)
 }

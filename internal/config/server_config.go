@@ -16,6 +16,8 @@ type ServerConfig struct {
 	Restore         bool          `default:"true"`
 	DatabaseDSN     string
 	Key             string
+	AuditFile       string
+	AuditURL        string
 }
 
 func GetServerConfig(args []string) (*ServerConfig, error) {
@@ -37,6 +39,8 @@ func GetServerConfig(args []string) (*ServerConfig, error) {
 	cfg.Restore = flagCfg.Restore
 	cfg.DatabaseDSN = flagCfg.DatabaseDSN
 	cfg.Key = flagCfg.Key
+	cfg.AuditFile = flagCfg.AuditFile
+	cfg.AuditURL = flagCfg.AuditURL
 
 	// Слой окружения. Переопределяем только присутствующие (не-nil) поля.
 	envCfg, err := env.GetServerConfigEnv()
@@ -60,6 +64,12 @@ func GetServerConfig(args []string) (*ServerConfig, error) {
 	}
 	if envCfg.Key != nil && *envCfg.Key != "" {
 		cfg.Key = *envCfg.Key
+	}
+	if envCfg.AuditFile != nil && *envCfg.AuditFile != "" {
+		cfg.AuditFile = *envCfg.AuditFile
+	}
+	if envCfg.AuditURL != nil && *envCfg.AuditURL != "" {
+		cfg.AuditURL = *envCfg.AuditURL
 	}
 
 	return cfg, nil
