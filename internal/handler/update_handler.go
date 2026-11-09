@@ -1,16 +1,32 @@
 package handlers
 
 import (
+	"bytes"
 	"errors"
-	"fmt"
 	"net/http"
 	model "practice/internal/model"
 	"practice/internal/storage"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 )
+
+const maxPooledHTML = 64 << 10
+
+var htmlBuffers = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
+
+func putHTMLBuffer(buf *bytes.Buffer) {
+	if buf.Cap() > maxPooledHTML {
+		return
+	}
+
+	buf.Reset()
+	htmlBuffers.Put(buf)
+}
 
 type Handler struct {
 	store storage.MetricStorage
@@ -51,14 +67,15 @@ func (h *Handler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
 		v, _ := model.ParseCounter(mtype, valueStr)
 		m = model.NewCountMetric(name, v)
 	}
-	_ = m.CalculateHash()
 
 	if err := h.store.Save(req.Context(), m); err != nil {
 		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	h.audit.Record([]string{name}, clientIP(req))
+	if h.audit.Enabled() {
+		h.audit.Record([]string{name}, clientIP(req))
+	}
 
 	res.WriteHeader(http.StatusOK)
 }
@@ -103,25 +120,35 @@ func (h *Handler) ListHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var b strings.Builder
-	b.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Metrics</title></head><body>`)
-	b.WriteString("<h1>Metrics</h1><ul>")
+	buf := htmlBuffers.Get().(*bytes.Buffer)
+	defer putHTMLBuffer(buf)
+
+	buf.Reset()
+	buf.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Metrics</title></head><body>`)
+	buf.WriteString("<h1>Metrics</h1><ul>")
 	if len(all) == 0 {
-		b.WriteString("<li>no metrics yet</li>")
+		buf.WriteString("<li>no metrics yet</li>")
 	}
+
+	var scratch [32]byte
 	for _, m := range all {
-		typeName := model.MetricType(m.MType).String()
-		var val string
+		buf.WriteString("<li><b>")
+		buf.WriteString(m.ID)
+		buf.WriteString("</b> [")
+		buf.WriteString(model.MetricType(m.MType).String())
+		buf.WriteString("] = ")
+
 		if m.MType == int8(model.Gauge) {
-			val = strconv.FormatFloat(m.Value, 'f', -1, 64)
+			buf.Write(strconv.AppendFloat(scratch[:0], m.Value, 'f', -1, 64))
 		} else {
-			val = strconv.FormatInt(m.Delta, 10)
+			buf.Write(strconv.AppendInt(scratch[:0], m.Delta, 10))
 		}
-		b.WriteString(fmt.Sprintf("<li><b>%s</b> [%s] = %s</li>", m.ID, typeName, val))
+
+		buf.WriteString("</li>")
 	}
-	b.WriteString("</ul></body></html>")
+	buf.WriteString("</ul></body></html>")
 
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	res.WriteHeader(http.StatusOK)
-	res.Write([]byte(b.String()))
+	res.Write(buf.Bytes())
 }

@@ -14,14 +14,21 @@ const (
 )
 
 func (m MetricType) String() string {
-	return [...]string{"Unknown", "Gauge", "Counter"}[m]
+	switch m {
+	case Gauge:
+		return "Gauge"
+	case Counter:
+		return "Counter"
+	default:
+		return "Unknown"
+	}
 }
 
 func GetTypeMetric(typeMetric string) MetricType {
-	switch strings.ToLower(typeMetric) {
-	case strings.ToLower(Gauge.String()):
+	switch {
+	case strings.EqualFold(typeMetric, Gauge.WireName()):
 		return Gauge
-	case strings.ToLower(Counter.String()):
+	case strings.EqualFold(typeMetric, Counter.WireName()):
 		return Counter
 	default:
 		return Unknown

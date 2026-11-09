@@ -1,13 +1,28 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
 	model "practice/internal/model"
 	"practice/internal/storage"
 	"strings"
+	"sync"
 )
+
+type jsonEncoder struct {
+	buf bytes.Buffer
+	enc *json.Encoder
+}
+
+var jsonEncoders = sync.Pool{
+	New: func() any {
+		e := new(jsonEncoder)
+		e.enc = json.NewEncoder(&e.buf)
+		return e
+	},
+}
 
 const (
 	contentTypeJSON = "application/json"
@@ -35,10 +50,21 @@ func decodeMetrics(res http.ResponseWriter, req *http.Request) (model.Metrics, b
 }
 
 func writeJSON(res http.ResponseWriter, status int, v any) {
-	body, err := json.Marshal(v)
-	if err != nil {
+	e := jsonEncoders.Get().(*jsonEncoder)
+	defer func() {
+		e.buf.Reset()
+		jsonEncoders.Put(e)
+	}()
+
+	e.buf.Reset()
+	if err := e.enc.Encode(v); err != nil {
 		http.Error(res, "response encoding error", http.StatusInternalServerError)
 		return
+	}
+
+	body := e.buf.Bytes()
+	if n := len(body); n > 0 && body[n-1] == '\n' {
+		body = body[:n-1]
 	}
 
 	res.Header().Set("Content-Type", contentTypeJSON)
@@ -67,7 +93,6 @@ func (h *Handler) UpdateJSONHandler(res http.ResponseWriter, req *http.Request) 
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_ = m.CalculateHash()
 
 	if err := h.store.Save(req.Context(), m); err != nil {
 		http.Error(res, "storage error: "+err.Error(), http.StatusInternalServerError)
@@ -86,7 +111,9 @@ func (h *Handler) UpdateJSONHandler(res http.ResponseWriter, req *http.Request) 
 		stored = m
 	}
 
-	h.audit.Record([]string{m.ID}, clientIP(req))
+	if h.audit.Enabled() {
+		h.audit.Record([]string{m.ID}, clientIP(req))
+	}
 
 	writeJSON(res, http.StatusOK, model.FromDomain(stored))
 }

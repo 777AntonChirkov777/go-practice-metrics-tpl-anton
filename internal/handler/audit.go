@@ -6,6 +6,7 @@ import (
 )
 
 type Auditor interface {
+	Enabled() bool
 	Record(metrics []string, ip string)
 }
 

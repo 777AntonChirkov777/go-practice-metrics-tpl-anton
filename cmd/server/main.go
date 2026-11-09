@@ -14,18 +14,16 @@ import (
 	"time"
 
 	"practice/internal/audit"
-	"practice/internal/compress"
 	config "practice/internal/config"
 	"practice/internal/db"
 	"practice/internal/dbstore"
 	"practice/internal/filestore"
 	handlers "practice/internal/handler"
-	"practice/internal/hash"
 	"practice/internal/logger"
+	"practice/internal/server"
 	"practice/internal/storage"
 	"practice/migrations"
 
-	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
@@ -71,29 +69,7 @@ func run() error {
 
 	metricStore, onShutdown := buildStorage(ctx, cfg, conn)
 
-	h := handlers.NewHandler(metricStore, auditor)
-
-	r := chi.NewRouter()
-	r.Use(logger.RequestLogger)
-	r.Use(compress.Middleware)
-	r.Use(hash.Middleware(cfg.Key))
-	r.Get("/", h.ListHandler)
-
-	r.Post("/update", h.UpdateJSONHandler)
-	r.Post("/update/", h.UpdateJSONHandler)
-	r.Post("/value", h.ValueJSONHandler)
-	r.Post("/value/", h.ValueJSONHandler)
-
-	r.Post("/updates", h.UpdatesJSONHandler)
-	r.Post("/updates/", h.UpdatesJSONHandler)
-
-	// Текстовые эндпоинты инкрементов 1-5 остаются нетронутыми.
-	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
-	r.Get("/value/{type}/{name}", h.ValueHandler)
-
-	ph := handlers.NewPingHandler(pinger)
-	r.Get("/ping", ph.Ping)
-	r.Get("/ping/", ph.Ping)
+	r := server.NewRouter(metricStore, auditor, pinger, cfg.Key)
 
 	_, port, err := net.SplitHostPort(cfg.Address)
 	if err != nil {
