@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var serverEnvKeys = []string{"ADDRESS", "STORE_INTERVAL", "FILE_STORAGE_PATH", "RESTORE", "DATABASE_DSN", "KEY"}
+var serverEnvKeys = []string{"ADDRESS", "STORE_INTERVAL", "FILE_STORAGE_PATH", "RESTORE", "DATABASE_DSN", "KEY", "AUDIT_FILE", "AUDIT_URL"}
 
 func resetServerEnv(t *testing.T) {
 	t.Helper()
@@ -252,5 +252,69 @@ func TestGetServerConfig_NoKey(t *testing.T) {
 	}
 	if cfg.Key != "" {
 		t.Errorf("Key = %q, want empty", cfg.Key)
+	}
+}
+
+func TestGetServerConfig_AuditFromFlags(t *testing.T) {
+	resetServerEnv(t)
+
+	cfg, err := GetServerConfig([]string{"-audit-file=/flag/audit.jsonl", "-audit-url=http://flag:9000/audit"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuditFile != "/flag/audit.jsonl" {
+		t.Errorf("AuditFile = %q, want /flag/audit.jsonl", cfg.AuditFile)
+	}
+	if cfg.AuditURL != "http://flag:9000/audit" {
+		t.Errorf("AuditURL = %q, want http://flag:9000/audit", cfg.AuditURL)
+	}
+}
+
+func TestGetServerConfig_AuditFromEnvOnly(t *testing.T) {
+	resetServerEnv(t)
+	t.Setenv("AUDIT_FILE", "/env/audit.jsonl")
+	t.Setenv("AUDIT_URL", "http://env:9000/audit")
+
+	cfg, err := GetServerConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuditFile != "/env/audit.jsonl" {
+		t.Errorf("AuditFile = %q, want /env/audit.jsonl", cfg.AuditFile)
+	}
+	if cfg.AuditURL != "http://env:9000/audit" {
+		t.Errorf("AuditURL = %q, want http://env:9000/audit", cfg.AuditURL)
+	}
+}
+
+func TestGetServerConfig_EnvAuditOverridesFlags(t *testing.T) {
+	resetServerEnv(t)
+	t.Setenv("AUDIT_FILE", "/env/audit.jsonl")
+	t.Setenv("AUDIT_URL", "http://env:9000/audit")
+
+	cfg, err := GetServerConfig([]string{"-audit-file=/flag/audit.jsonl", "-audit-url=http://flag:9000/audit"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuditFile != "/env/audit.jsonl" {
+		t.Errorf("AuditFile = %q, want /env/audit.jsonl: окружение обязано перекрывать флаг", cfg.AuditFile)
+	}
+	if cfg.AuditURL != "http://env:9000/audit" {
+		t.Errorf("AuditURL = %q, want http://env:9000/audit: окружение обязано перекрывать флаг", cfg.AuditURL)
+	}
+}
+
+func TestGetServerConfig_AuditNotConfigured(t *testing.T) {
+	resetServerEnv(t)
+
+	cfg, err := GetServerConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuditFile != "" {
+		t.Errorf("AuditFile = %q, want empty", cfg.AuditFile)
+	}
+	if cfg.AuditURL != "" {
+		t.Errorf("AuditURL = %q, want empty", cfg.AuditURL)
 	}
 }

@@ -17,9 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createBatchRouter(store *MockStorage) *chi.Mux {
+func createBatchRouter(store *MockStorage, audit ...Auditor) *chi.Mux {
 	r := chi.NewRouter()
-	h := NewHandler(store)
+	h := NewHandler(store, firstAuditor(audit))
 	r.Post("/updates", h.UpdatesJSONHandler)
 	r.Post("/updates/", h.UpdatesJSONHandler)
 	r.Post("/update/", h.UpdateJSONHandler)

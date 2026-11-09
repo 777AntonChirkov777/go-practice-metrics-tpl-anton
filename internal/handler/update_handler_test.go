@@ -16,6 +16,7 @@ import (
 type MockStorage struct {
 	metrics  map[string]*model.Metric
 	batchErr error
+	saveErr  error
 }
 
 func NewMockStorage() *MockStorage {
@@ -25,6 +26,10 @@ func NewMockStorage() *MockStorage {
 }
 
 func (m *MockStorage) Save(_ context.Context, metric *model.Metric) error {
+	if m.saveErr != nil {
+		return m.saveErr
+	}
+
 	key := metric.ID + "_" + string(rune(metric.MType))
 
 	// Реализуем логику накопления для counter
@@ -71,9 +76,9 @@ func (m *MockStorage) GetAll(_ context.Context) ([]*model.Metric, error) {
 }
 
 // createTestRouter создаёт тестовый роутер с хендлерами
-func createTestRouter(store *MockStorage) *chi.Mux {
+func createTestRouter(store *MockStorage, audit ...Auditor) *chi.Mux {
 	r := chi.NewRouter()
-	h := NewHandler(store)
+	h := NewHandler(store, firstAuditor(audit))
 	r.Get("/", h.ListHandler)
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)

@@ -15,9 +15,9 @@ import (
 
 // createJSONRouter — отдельный от createTestRouter хелпер: текстовые маршруты
 // в JSON-тестах не участвуют.
-func createJSONRouter(store *MockStorage) *chi.Mux {
+func createJSONRouter(store *MockStorage, audit ...Auditor) *chi.Mux {
 	r := chi.NewRouter()
-	h := NewHandler(store)
+	h := NewHandler(store, firstAuditor(audit))
 	r.Post("/update", h.UpdateJSONHandler)
 	r.Post("/update/", h.UpdateJSONHandler)
 	r.Post("/value", h.ValueJSONHandler)
