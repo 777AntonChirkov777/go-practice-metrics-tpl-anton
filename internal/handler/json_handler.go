@@ -86,6 +86,8 @@ func (h *Handler) UpdateJSONHandler(res http.ResponseWriter, req *http.Request) 
 		stored = m
 	}
 
+	h.audit.Record([]string{m.ID}, clientIP(req))
+
 	writeJSON(res, http.StatusOK, model.FromDomain(stored))
 }
 

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"practice/internal/audit"
 	"practice/internal/compress"
 	config "practice/internal/config"
 	"practice/internal/db"
@@ -53,6 +54,12 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	auditor, err := buildAuditor(cfg)
+	if err != nil {
+		return fmt.Errorf("error audit configuration: %w", err)
+	}
+	auditor.Start()
+
 	var pinger handlers.Pinger
 	conn, err := db.New(cfg.DatabaseDSN)
 	if err != nil {
@@ -64,7 +71,7 @@ func run() error {
 
 	metricStore, onShutdown := buildStorage(ctx, cfg, conn)
 
-	h := handlers.NewHandler(metricStore)
+	h := handlers.NewHandler(metricStore, auditor)
 
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger)
@@ -122,8 +129,41 @@ func run() error {
 	}
 
 	onShutdown()
+	auditor.Close()
 
 	return runErr
+}
+
+func buildAuditor(cfg *config.ServerConfig) (*audit.Notifier, error) {
+	notifier := audit.NewNotifier()
+
+	if cfg.AuditFile != "" {
+		sink, err := audit.NewFileSink(cfg.AuditFile)
+		if err != nil {
+			notifier.Close()
+			return nil, err
+		}
+
+		notifier.Subscribe(sink)
+		logger.Log.Info("audit sink: file", zap.String("file", cfg.AuditFile))
+	}
+
+	if cfg.AuditURL != "" {
+		sink, err := audit.NewHTTPSink(cfg.AuditURL)
+		if err != nil {
+			notifier.Close()
+			return nil, err
+		}
+
+		notifier.Subscribe(sink)
+		logger.Log.Info("audit sink: http", zap.String("url", cfg.AuditURL))
+	}
+
+	if !notifier.Enabled() {
+		logger.Log.Info("audit disabled")
+	}
+
+	return notifier, nil
 }
 
 func buildStorage(ctx context.Context, cfg *config.ServerConfig, conn *sql.DB) (storage.MetricStorage, func()) {
