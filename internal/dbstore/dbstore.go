@@ -219,8 +219,8 @@ func (s *Storage) getOnce(ctx context.Context, mtype model.MetricType, name stri
 	}
 }
 
-func (s *Storage) GetAll(ctx context.Context) ([]*model.Metric, error) {
-	var all []*model.Metric
+func (s *Storage) GetAll(ctx context.Context) ([]model.Metric, error) {
+	var all []model.Metric
 
 	err := retry.Do(ctx, "dbstore.GetAll", s.delays, isRetriable, func(ctx context.Context) error {
 		var err error
@@ -234,7 +234,7 @@ func (s *Storage) GetAll(ctx context.Context) ([]*model.Metric, error) {
 	return all, nil
 }
 
-func (s *Storage) getAllOnce(ctx context.Context) ([]*model.Metric, error) {
+func (s *Storage) getAllOnce(ctx context.Context) ([]model.Metric, error) {
 	gauges, err := s.allGauges(ctx)
 	if err != nil {
 		return nil, err
@@ -248,14 +248,14 @@ func (s *Storage) getAllOnce(ctx context.Context) ([]*model.Metric, error) {
 	return append(gauges, counters...), nil
 }
 
-func (s *Storage) allGauges(ctx context.Context) ([]*model.Metric, error) {
+func (s *Storage) allGauges(ctx context.Context) ([]model.Metric, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, value FROM gauges ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	out := make([]*model.Metric, 0)
+	out := make([]model.Metric, 0)
 	for rows.Next() {
 		var (
 			id    string
@@ -264,20 +264,20 @@ func (s *Storage) allGauges(ctx context.Context) ([]*model.Metric, error) {
 		if err := rows.Scan(&id, &value); err != nil {
 			return nil, err
 		}
-		out = append(out, model.NewGaugeMetric(id, value))
+		out = append(out, *model.NewGaugeMetric(id, value))
 	}
 
 	return out, rows.Err()
 }
 
-func (s *Storage) allCounters(ctx context.Context) ([]*model.Metric, error) {
+func (s *Storage) allCounters(ctx context.Context) ([]model.Metric, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, delta FROM counters ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	out := make([]*model.Metric, 0)
+	out := make([]model.Metric, 0)
 	for rows.Next() {
 		var (
 			id    string
@@ -286,7 +286,7 @@ func (s *Storage) allCounters(ctx context.Context) ([]*model.Metric, error) {
 		if err := rows.Scan(&id, &delta); err != nil {
 			return nil, err
 		}
-		out = append(out, model.NewCountMetric(id, delta))
+		out = append(out, *model.NewCountMetric(id, delta))
 	}
 
 	return out, rows.Err()

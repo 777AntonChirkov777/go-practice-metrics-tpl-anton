@@ -5,7 +5,16 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
+
+var writerPool = sync.Pool{
+	New: func() any { return gzip.NewWriter(io.Discard) },
+}
+
+var readerPool = sync.Pool{
+	New: func() any { return new(gzip.Reader) },
+}
 
 func isCompressible(contentType string) bool {
 	if i := strings.IndexByte(contentType, ';'); i >= 0 {
@@ -90,7 +99,9 @@ func (c *compressWriter) WriteHeader(statusCode int) {
 		// После сжатия длина тела другая. Устаревший Content-Length
 		// обрезал бы ответ у клиента — снимаем, пусть Go выберет chunked.
 		c.Header().Del("Content-Length")
-		c.zw = gzip.NewWriter(c.ResponseWriter)
+		zw := writerPool.Get().(*gzip.Writer)
+		zw.Reset(c.ResponseWriter)
+		c.zw = zw
 	}
 
 	c.ResponseWriter.WriteHeader(statusCode)
@@ -110,10 +121,16 @@ func (c *compressWriter) Write(b []byte) (int, error) {
 // Close дописывает gzip-трейлер. Вызывается из middleware после хендлера.
 // Если сжатие не включалось, zw == nil и делать нечего.
 func (c *compressWriter) Close() error {
-	if c.zw != nil {
-		return c.zw.Close()
+	if c.zw == nil {
+		return nil
 	}
-	return nil
+
+	err := c.zw.Close()
+
+	writerPool.Put(c.zw)
+	c.zw = nil
+
+	return err
 }
 
 // compressReader подменяет r.Body: наружу отдаёт распакованный поток,
@@ -124,8 +141,9 @@ type compressReader struct {
 }
 
 func newCompressReader(body io.ReadCloser) (*compressReader, error) {
-	zr, err := gzip.NewReader(body)
-	if err != nil {
+	zr := readerPool.Get().(*gzip.Reader)
+	if err := zr.Reset(body); err != nil {
+		readerPool.Put(zr)
 		return nil, err
 	}
 	return &compressReader{body: body, zr: zr}, nil
@@ -136,8 +154,16 @@ func (c *compressReader) Read(p []byte) (int, error) {
 }
 
 func (c *compressReader) Close() error {
+	if c.zr == nil {
+		return nil
+	}
+
 	// Закрываем обе стороны; исходное тело — всегда, даже если zr дал ошибку.
 	zerr := c.zr.Close()
+
+	readerPool.Put(c.zr)
+	c.zr = nil
+
 	berr := c.body.Close()
 	if zerr != nil {
 		return zerr

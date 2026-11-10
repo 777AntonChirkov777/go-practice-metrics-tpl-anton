@@ -102,19 +102,17 @@ func (s *MemStorage) Get(_ context.Context, mtype model.MetricType, name string)
 	return nil, ErrNotFound
 }
 
-func (s *MemStorage) GetAll(_ context.Context) ([]*model.Metric, error) {
+func (s *MemStorage) GetAll(_ context.Context) ([]model.Metric, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Копии по той же причине, что и в Get.
-	out := make([]*model.Metric, 0, len(s.gauges)+len(s.counter))
+	out := make([]model.Metric, 0, len(s.gauges)+len(s.counter))
 	for _, m := range s.gauges {
-		cp := *m
-		out = append(out, &cp)
+		out = append(out, *m)
 	}
 	for _, m := range s.counter {
-		cp := *m
-		out = append(out, &cp)
+		out = append(out, *m)
 	}
 	return out, nil
 }

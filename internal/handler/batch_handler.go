@@ -29,7 +29,14 @@ func (h *Handler) UpdatesJSONHandler(res http.ResponseWriter, req *http.Request)
 	}
 
 	batch := make([]*model.Metric, 0, len(in))
-	names := make([]string, 0, len(in))
+
+	audited := h.audit.Enabled()
+
+	var names []string
+	if audited {
+		names = make([]string, 0, len(in))
+	}
+
 	for _, w := range in {
 		w.ID = strings.TrimSpace(w.ID)
 		if w.ID == "" {
@@ -42,10 +49,12 @@ func (h *Handler) UpdatesJSONHandler(res http.ResponseWriter, req *http.Request)
 			http.Error(res, err.Error(), http.StatusBadRequest)
 			return
 		}
-		_ = m.CalculateHash()
 
 		batch = append(batch, m)
-		names = append(names, m.ID)
+
+		if audited {
+			names = append(names, m.ID)
+		}
 	}
 
 	if err := h.store.SaveBatch(req.Context(), batch); err != nil {
@@ -53,7 +62,9 @@ func (h *Handler) UpdatesJSONHandler(res http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	h.audit.Record(names, clientIP(req))
+	if audited {
+		h.audit.Record(names, clientIP(req))
+	}
 
 	res.WriteHeader(http.StatusOK)
 }

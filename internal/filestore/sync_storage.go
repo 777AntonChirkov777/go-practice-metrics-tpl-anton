@@ -48,6 +48,6 @@ func (s *SyncStorage) Get(ctx context.Context, mtype model.MetricType, name stri
 	return s.store.Get(ctx, mtype, name)
 }
 
-func (s *SyncStorage) GetAll(ctx context.Context) ([]*model.Metric, error) {
+func (s *SyncStorage) GetAll(ctx context.Context) ([]model.Metric, error) {
 	return s.store.GetAll(ctx)
 }

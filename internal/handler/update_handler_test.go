@@ -67,10 +67,10 @@ func (m *MockStorage) Get(_ context.Context, mtype model.MetricType, name string
 	return metric, nil
 }
 
-func (m *MockStorage) GetAll(_ context.Context) ([]*model.Metric, error) {
-	result := make([]*model.Metric, 0, len(m.metrics))
-	for _, m := range m.metrics {
-		result = append(result, m)
+func (m *MockStorage) GetAll(_ context.Context) ([]model.Metric, error) {
+	result := make([]model.Metric, 0, len(m.metrics))
+	for _, metric := range m.metrics {
+		result = append(result, *metric)
 	}
 	return result, nil
 }

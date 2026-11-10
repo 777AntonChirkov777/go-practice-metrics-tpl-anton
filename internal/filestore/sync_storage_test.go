@@ -112,7 +112,7 @@ func (c *countingStorage) Get(ctx context.Context, mtype model.MetricType, name 
 	return c.inner.Get(ctx, mtype, name)
 }
 
-func (c *countingStorage) GetAll(ctx context.Context) ([]*model.Metric, error) {
+func (c *countingStorage) GetAll(ctx context.Context) ([]model.Metric, error) {
 	c.getAllCalls++
 	return c.inner.GetAll(ctx)
 }

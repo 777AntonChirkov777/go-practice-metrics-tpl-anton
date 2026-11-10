@@ -1,6 +1,7 @@
 package filestore
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,7 +13,7 @@ import (
 )
 
 type Snapshotter interface {
-	GetAll(ctx context.Context) ([]*model.Metric, error)
+	GetAll(ctx context.Context) ([]model.Metric, error)
 }
 
 type FileStore struct {
@@ -23,6 +24,48 @@ type FileStore struct {
 
 func New(path string) *FileStore {
 	return &FileStore{path: path}
+}
+
+const dumpBufferSize = 32 << 10
+
+type dumpEncoder struct {
+	buf *bufio.Writer
+	enc *json.Encoder
+}
+
+var dumpEncoders = sync.Pool{
+	New: func() any {
+		d := &dumpEncoder{buf: bufio.NewWriterSize(nil, dumpBufferSize)}
+		d.enc = json.NewEncoder(d.buf)
+		d.enc.SetIndent("", "  ")
+		return d
+	},
+}
+
+func writeDump(path string, dtos []model.Metrics) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+
+	d := dumpEncoders.Get().(*dumpEncoder)
+	defer func() {
+		d.buf.Reset(nil)
+		dumpEncoders.Put(d)
+	}()
+
+	d.buf.Reset(f)
+
+	if err := d.enc.Encode(dtos); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := d.buf.Flush(); err != nil {
+		_ = f.Close()
+		return err
+	}
+
+	return f.Close()
 }
 
 func (fs *FileStore) SaveFrom(ctx context.Context, src Snapshotter) error {
@@ -37,26 +80,21 @@ func (fs *FileStore) SaveFrom(ctx context.Context, src Snapshotter) error {
 	return fs.saveLocked(metrics)
 }
 
-func (fs *FileStore) save(metrics []*model.Metric) error {
+func (fs *FileStore) save(metrics []model.Metric) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
 	return fs.saveLocked(metrics)
 }
 
-func (fs *FileStore) saveLocked(metrics []*model.Metric) error {
+func (fs *FileStore) saveLocked(metrics []model.Metric) error {
 	if fs.path == "" {
 		return nil
 	}
 
 	dtos := make([]model.Metrics, 0, len(metrics))
-	for _, m := range metrics {
-		dtos = append(dtos, model.FromDomain(m))
-	}
-
-	data, err := json.MarshalIndent(dtos, "", "  ")
-	if err != nil {
-		return err
+	for i := range metrics {
+		dtos = append(dtos, model.FromDomain(&metrics[i]))
 	}
 
 	if !fs.dirReady {
@@ -71,7 +109,7 @@ func (fs *FileStore) saveLocked(metrics []*model.Metric) error {
 	// Пишем во временный файл рядом с целевым и атомарно переименовываем,
 	// чтобы читатель никогда не увидел частично записанный файл.
 	tmp := fs.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := writeDump(tmp, dtos); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}
