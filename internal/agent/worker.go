@@ -2,8 +2,9 @@ package agent
 
 import (
 	"context"
-	"practice/internal/logger"
 	"time"
+
+	"practice/internal/logger"
 
 	"go.uber.org/zap"
 )

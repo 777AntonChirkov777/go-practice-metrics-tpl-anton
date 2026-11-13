@@ -1,10 +1,11 @@
 package config
 
 import (
+	"time"
+
 	env "practice/internal/config/env"
 	flag "practice/internal/config/flag"
 	"practice/internal/logger"
-	"time"
 
 	"github.com/creasty/defaults"
 	"go.uber.org/zap"

@@ -2,8 +2,9 @@ package storage
 
 import (
 	"context"
-	model "practice/internal/model"
 	"sync"
+
+	model "practice/internal/model"
 )
 
 type MemStorage struct {

@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"net/http"
-	model "practice/internal/model"
-	"practice/internal/storage"
 	"strconv"
 	"strings"
 	"sync"
+
+	model "practice/internal/model"
+	"practice/internal/storage"
 
 	"github.com/go-chi/chi/v5"
 )

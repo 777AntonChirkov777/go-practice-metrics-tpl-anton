@@ -9,13 +9,14 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"runtime"
+	"sync"
+	"time"
+
 	"practice/internal/hash"
 	"practice/internal/logger"
 	models "practice/internal/model"
 	"practice/internal/retry"
-	"runtime"
-	"sync"
-	"time"
 
 	"go.uber.org/zap"
 )

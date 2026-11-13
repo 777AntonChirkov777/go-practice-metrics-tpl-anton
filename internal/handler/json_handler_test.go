@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	model "practice/internal/model"
 	"testing"
+
+	model "practice/internal/model"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"

@@ -4,9 +4,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"testing"
+
 	model "practice/internal/model"
 	"practice/internal/storage"
-	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
