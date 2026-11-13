@@ -1,4 +1,3 @@
-// agent.go
 package agent
 
 import (
@@ -248,6 +247,10 @@ func (a *Agent) GetMetrics() (gauges map[string]float64, pollCount int64) {
 	return
 }
 
+// Wait блокирует вызывающий код, пока не завершатся все горутины, запущенные
+// методом [Agent.Start]: сборщики метрик, диспетчер и воркеры. Они завершаются
+// после отмены контекста, переданного в Start, поэтому Wait вызывают после
+// отмены этого контекста.
 func (a *Agent) Wait() {
 	a.wg.Wait()
 }

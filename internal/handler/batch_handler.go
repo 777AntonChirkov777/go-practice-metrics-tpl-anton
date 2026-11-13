@@ -10,6 +10,27 @@ import (
 
 const maxBatchBodyBytes = 4 << 20
 
+// UpdatesJSONHandler обрабатывает POST /updates и POST /updates/: сохраняет
+// пакет метрик, переданный JSON-массивом.
+//
+// Тело запроса — массив объектов [model.Metrics] с полями id, type, а также
+// delta для counter или value для gauge. Размер тела ограничен 4 МиБ. Пробелы по
+// краям id отбрасываются. Все элементы проверяются до сохранения, поэтому при
+// ошибке в любом из них ничего не сохраняется. Валидный пакет записывается через
+// SaveBatch за один вызов: gauge заменяет значение, counter накапливается. Пустой
+// массив принимается без обращения к хранилищу. Тело успешного ответа пустое.
+//
+// Коды ответа:
+//   - 200 — пакет сохранён (или пуст);
+//   - 400 — тело не разбирается как JSON-массив или превышает лимит ("invalid json
+//     body"), после массива [json.Decoder.More] находит ещё данные ("unexpected
+//     trailing data after json array"), у элемента пустой id ("metric id is
+//     required") либо элемент не превращается в метрику (текст ошибки
+//     [model.Metrics.ToDomain]);
+//   - 500 — хранилище вернуло ошибку ("storage error: ...").
+//
+// При включённом аудите после сохранения вызывается [Auditor.Record] с именами
+// метрик пакета и IP-адресом клиента.
 func (h *Handler) UpdatesJSONHandler(res http.ResponseWriter, req *http.Request) {
 	req.Body = http.MaxBytesReader(res, req.Body, maxBatchBodyBytes)
 
