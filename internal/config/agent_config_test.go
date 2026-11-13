@@ -1,10 +1,11 @@
 package config
 
 import (
-	"practice/internal/logger"
 	"strings"
 	"testing"
 	"time"
+
+	"practice/internal/logger"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

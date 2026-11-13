@@ -8,9 +8,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"testing"
+
 	"practice/internal/compress"
 	model "practice/internal/model"
-	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"

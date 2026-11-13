@@ -6,8 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"practice/internal/compress"
 	"testing"
+
+	"practice/internal/compress"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

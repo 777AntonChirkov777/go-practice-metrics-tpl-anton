@@ -3,8 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	model "practice/internal/model"
 	"strings"
+
+	model "practice/internal/model"
 )
 
 const maxBatchBodyBytes = 4 << 20

@@ -3,8 +3,9 @@ package agent
 import (
 	"context"
 	"fmt"
-	"practice/internal/logger"
 	"time"
+
+	"practice/internal/logger"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"

@@ -10,11 +10,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"practice/internal/hash"
-	models "practice/internal/model"
 	"sync"
 	"testing"
 	"time"
+
+	"practice/internal/hash"
+	models "practice/internal/model"
 )
 
 func TestCollectMetrics(t *testing.T) {

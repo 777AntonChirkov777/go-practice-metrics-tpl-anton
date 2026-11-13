@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	model "practice/internal/model"
-	"practice/internal/storage"
 	"strings"
 	"sync"
+
+	model "practice/internal/model"
+	"practice/internal/storage"
 )
 
 type jsonEncoder struct {

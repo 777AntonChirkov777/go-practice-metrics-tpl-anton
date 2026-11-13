@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"syscall"
+
 	agent "practice/internal/agent"
 	config "practice/internal/config"
 	"practice/internal/logger"
-	"syscall"
 
 	"go.uber.org/zap"
 )
