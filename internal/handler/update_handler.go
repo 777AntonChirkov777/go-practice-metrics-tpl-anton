@@ -29,16 +29,38 @@ func putHTMLBuffer(buf *bytes.Buffer) {
 	htmlBuffers.Put(buf)
 }
 
+// Handler объединяет HTTP-обработчики метрик: текстовые, JSON и пакетные.
+// Хранилище и приёмник аудита задаются в [NewHandler].
 type Handler struct {
 	store storage.MetricStorage
 	audit Auditor
 }
 
+// NewHandler создаёт [Handler] поверх хранилища store и приёмника аудита
+// auditor. Оба аргумента обязательны: хендлеры обращаются к ним без проверки
+// на nil.
 func NewHandler(store storage.MetricStorage, auditor Auditor) *Handler {
 	return &Handler{store: store, audit: auditor}
 }
 
-// POST /update/{type}/{name}/{value}
+// UpdateHandler обрабатывает POST /update/{type}/{name}/{value}: сохраняет одно
+// значение метрики, переданное сегментами пути.
+//
+// Тип (gauge или counter) сравнивается без учёта регистра, name и value
+// очищаются от пробелов по краям. Для gauge значение разбирается как float64 и
+// заменяет прежнее, для counter — как десятичное int64 и прибавляется к
+// накопленному. Тело запроса не читается, тело успешного ответа пустое.
+//
+// Коды ответа:
+//   - 200 — метрика сохранена;
+//   - 400 — тип пуст или имя либо значение пусты после обрезки пробелов
+//     ("Expected /update/{type}/{name}/{value}"),
+//     неизвестный тип ("Invalid metric type") или значение не разбирается как
+//     число нужного типа ("Invalid metric value");
+//   - 500 — хранилище вернуло ошибку ("storage error: ...").
+//
+// При включённом аудите после сохранения вызывается [Auditor.Record] с именем
+// метрики и IP-адресом клиента.
 func (h *Handler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
 	typeStr := chi.URLParam(req, "type")
 	name := strings.TrimSpace(chi.URLParam(req, "name"))
@@ -81,7 +103,20 @@ func (h *Handler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
 	res.WriteHeader(http.StatusOK)
 }
 
-// GET /value/{type}/{name}
+// ValueHandler обрабатывает GET /value/{type}/{name}: возвращает текущее
+// значение метрики в виде текста.
+//
+// Тип сравнивается без учёта регистра, name очищается от пробелов по краям.
+// Ответ приходит с Content-Type "text/plain; charset=utf-8": для gauge тело
+// содержит значение, отформатированное [strconv.FormatFloat] с форматом 'f' и
+// точностью -1 (без экспоненты и лишних нулей), для counter — накопленное
+// целое.
+//
+// Коды ответа:
+//   - 200 — метрика найдена, значение в теле;
+//   - 400 — неизвестный тип ("Invalid metric type");
+//   - 404 — метрики нет в хранилище ("metric not found");
+//   - 500 — иная ошибка хранилища ("storage error: ...").
 func (h *Handler) ValueHandler(res http.ResponseWriter, req *http.Request) {
 	typeStr := chi.URLParam(req, "type")
 	name := strings.TrimSpace(chi.URLParam(req, "name"))
@@ -113,7 +148,17 @@ func (h *Handler) ValueHandler(res http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// GET / — HTML со списком всех метрик
+// ListHandler обрабатывает GET /: отдаёт HTML-страницу со списком всех метрик
+// из хранилища.
+//
+// Каждая метрика выводится элементом списка в виде "имя [тип] = значение", для
+// пустого хранилища — строкой "no metrics yet". Ответ приходит с Content-Type
+// "text/html; charset=utf-8". Имена метрик в разметку выводятся как есть, без
+// экранирования.
+//
+// Коды ответа:
+//   - 200 — страница сформирована;
+//   - 500 — хранилище вернуло ошибку ("storage error: ...").
 func (h *Handler) ListHandler(res http.ResponseWriter, req *http.Request) {
 	all, err := h.store.GetAll(req.Context())
 	if err != nil {
