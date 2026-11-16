@@ -1,6 +1,8 @@
-package models
+package model
 
 import (
+	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -38,7 +40,7 @@ func GetTypeMetric(typeMetric string) MetricType {
 func IsParseMetricValue(typeMetric MetricType, valueStr string) bool {
 	switch typeMetric {
 	case Gauge:
-		if _, err := strconv.ParseFloat(valueStr, 64); err == nil {
+		if _, err := ParseGauge(typeMetric, valueStr); err == nil {
 			return true
 		} else {
 			return false
@@ -55,7 +57,14 @@ func IsParseMetricValue(typeMetric MetricType, valueStr string) bool {
 }
 
 func ParseGauge(typeMetric MetricType, valueStr string) (float64, error) {
-	return strconv.ParseFloat(valueStr, 64)
+	v, err := strconv.ParseFloat(valueStr, 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, fmt.Errorf("gauge value %q is not a finite number", valueStr)
+	}
+	return v, nil
 }
 
 func ParseCounter(typeMetric MetricType, valueStr string) (int64, error) {

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 )
 
 func TestMemStorage_SaveGetGauge(t *testing.T) {

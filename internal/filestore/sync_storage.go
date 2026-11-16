@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"practice/internal/logger"
-	model "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/storage"
 
 	"go.uber.org/zap"

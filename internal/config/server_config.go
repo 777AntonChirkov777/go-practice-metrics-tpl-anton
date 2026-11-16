@@ -3,8 +3,8 @@ package config
 import (
 	"time"
 
-	env "practice/internal/config/env"
-	flag "practice/internal/config/flag"
+	"practice/internal/config/env"
+	"practice/internal/config/flag"
 
 	"github.com/creasty/defaults"
 )

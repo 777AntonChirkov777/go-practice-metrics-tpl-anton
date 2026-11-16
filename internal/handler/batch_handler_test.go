@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"practice/internal/compress"
-	model "practice/internal/model"
+	"practice/internal/model"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"

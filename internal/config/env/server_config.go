@@ -1,4 +1,4 @@
-package config
+package env
 
 import (
 	"github.com/caarlos0/env/v11"

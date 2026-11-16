@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 )
 
 type Snapshotter interface {

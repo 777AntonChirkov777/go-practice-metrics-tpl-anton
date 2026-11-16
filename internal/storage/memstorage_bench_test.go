@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 )
 
 const benchStoreSize = 100

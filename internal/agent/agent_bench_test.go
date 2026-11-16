@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	models "practice/internal/model"
+	"practice/internal/model"
 )
 
 const benchAgentKey = "benchmark-signing-key"
 
 var (
-	benchSnapshotSink []models.Metrics
+	benchSnapshotSink []model.Metrics
 	benchGzipSink     []byte
 )
 
