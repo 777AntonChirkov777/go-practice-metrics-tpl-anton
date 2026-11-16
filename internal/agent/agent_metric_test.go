@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"practice/internal/hash"
-	models "practice/internal/model"
+	"practice/internal/model"
 )
 
 func TestCollectMetrics(t *testing.T) {
@@ -57,7 +57,7 @@ func TestReport(t *testing.T) {
 	// переменные защищаем мьютексом, чтобы тест был чист под go test -race.
 	var mu sync.Mutex
 	var requests int
-	var received []models.Metrics
+	var received []model.Metrics
 
 	// Тестовый HTTP-сервер, имитирующий сервер сбора метрик (JSON API).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +90,7 @@ func TestReport(t *testing.T) {
 		}
 		defer body.Close()
 
-		var batch []models.Metrics
+		var batch []model.Metrics
 		if err := json.NewDecoder(body).Decode(&batch); err != nil {
 			t.Errorf("decode batch: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
@@ -110,7 +110,7 @@ func TestReport(t *testing.T) {
 
 	mu.Lock()
 	gotRequests := requests
-	got := make([]models.Metrics, len(received))
+	got := make([]model.Metrics, len(received))
 	copy(got, received)
 	mu.Unlock()
 
@@ -208,7 +208,7 @@ func TestReportConcurrentWithCollect(t *testing.T) {
 		}
 		defer body.Close()
 
-		var batch []models.Metrics
+		var batch []model.Metrics
 		if err := json.NewDecoder(body).Decode(&batch); err != nil {
 			t.Errorf("decode batch: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
@@ -421,7 +421,7 @@ func TestSendBatchRetriesTransportFailure(t *testing.T) {
 	}
 	defer zr.Close()
 
-	var batch []models.Metrics
+	var batch []model.Metrics
 	if err := json.NewDecoder(zr).Decode(&batch); err != nil {
 		t.Fatalf("decode batch: %v", err)
 	}

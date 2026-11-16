@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/storage"
 )
 

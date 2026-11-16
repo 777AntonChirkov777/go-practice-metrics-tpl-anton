@@ -14,7 +14,7 @@ import (
 
 	"practice/internal/hash"
 	"practice/internal/logger"
-	models "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/retry"
 
 	"go.uber.org/zap"
@@ -29,7 +29,7 @@ type Agent struct {
 	client         *http.Client
 	retryDelays    []time.Duration
 	rateLimit      int
-	jobs           chan []models.Metrics
+	jobs           chan []model.Metrics
 	mu             sync.Mutex
 	gauges         map[string]float64
 	pollCount      int64
@@ -47,7 +47,7 @@ func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string,
 		client:         &http.Client{Timeout: 5 * time.Second},
 		retryDelays:    retry.DefaultDelays,
 		rateLimit:      rateLimit,
-		jobs:           make(chan []models.Metrics, rateLimit),
+		jobs:           make(chan []model.Metrics, rateLimit),
 		gauges:         make(map[string]float64),
 	}
 }
@@ -97,7 +97,7 @@ func (a *Agent) CollectMetrics() {
 }
 
 // snapshot копирует данные, чтобы не держать лок при HTTP-запросах.
-func (a *Agent) snapshot() []models.Metrics {
+func (a *Agent) snapshot() []model.Metrics {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -105,11 +105,11 @@ func (a *Agent) snapshot() []models.Metrics {
 		return nil
 	}
 
-	batch := make([]models.Metrics, 0, len(a.gauges)+1)
+	batch := make([]model.Metrics, 0, len(a.gauges)+1)
 	for name, val := range a.gauges {
-		batch = append(batch, models.NewGaugeDTO(name, val))
+		batch = append(batch, model.NewGaugeDTO(name, val))
 	}
-	batch = append(batch, models.NewCounterDTO("PollCount", a.pollCount))
+	batch = append(batch, model.NewCounterDTO("PollCount", a.pollCount))
 
 	return batch
 }
@@ -132,7 +132,7 @@ func gzipJSON(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (a *Agent) sendBatch(ctx context.Context, batch []models.Metrics) {
+func (a *Agent) sendBatch(ctx context.Context, batch []model.Metrics) {
 	// Слэш на конце — форма, которую использует сервер и автотесты; сервер
 	// принимает обе.
 	url := a.serverURL + "/updates/"

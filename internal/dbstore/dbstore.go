@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/retry"
 	"practice/internal/storage"
 )

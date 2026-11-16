@@ -1,4 +1,4 @@
-package handlers_test
+package handler_test
 
 import (
 	"bytes"
@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"practice/internal/audit"
-	handlers "practice/internal/handler"
+	"practice/internal/handler"
 	"practice/internal/hash"
-	models "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/server"
 	"practice/internal/storage"
 )
@@ -232,9 +232,9 @@ func ExampleHandler_UpdatesJSONHandler_agent() {
 	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, key))
 	defer srv.Close()
 
-	batch := []models.Metrics{
-		models.NewGaugeDTO("Alloc", 12.5),
-		models.NewCounterDTO("PollCount", 1),
+	batch := []model.Metrics{
+		model.NewGaugeDTO("Alloc", 12.5),
+		model.NewCounterDTO("PollCount", 1),
 	}
 	raw, err := json.Marshal(batch)
 	if err != nil {
@@ -287,7 +287,7 @@ func ExamplePingHandler_Ping() {
 	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, ""))
 	defer srv.Close()
 
-	var db handlers.Pinger = okPinger{}
+	var db handler.Pinger = okPinger{}
 	srvDB := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), db, ""))
 	defer srvDB.Close()
 

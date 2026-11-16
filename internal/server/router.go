@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"practice/internal/compress"
-	handlers "practice/internal/handler"
+	"practice/internal/handler"
 	"practice/internal/hash"
 	"practice/internal/logger"
 	"practice/internal/storage"
@@ -12,8 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(store storage.MetricStorage, auditor handlers.Auditor, pinger handlers.Pinger, key string) http.Handler {
-	h := handlers.NewHandler(store, auditor)
+func NewRouter(store storage.MetricStorage, auditor handler.Auditor, pinger handler.Pinger, key string) http.Handler {
+	h := handler.NewHandler(store, auditor)
 
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger)
@@ -33,7 +33,7 @@ func NewRouter(store storage.MetricStorage, auditor handlers.Auditor, pinger han
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandler)
 	r.Get("/value/{type}/{name}", h.ValueHandler)
 
-	ph := handlers.NewPingHandler(pinger)
+	ph := handler.NewPingHandler(pinger)
 	r.Get("/ping", ph.Ping)
 	r.Get("/ping/", ph.Ping)
 

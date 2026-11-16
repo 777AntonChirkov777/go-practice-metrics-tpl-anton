@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/storage"
 )
 

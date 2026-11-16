@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 )
 
 func TestAggregate_SplitsByTypeAndSortsByID(t *testing.T) {

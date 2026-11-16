@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/storage"
 
 	"github.com/go-chi/chi/v5"
@@ -430,4 +430,72 @@ func TestGaugeOverwrite(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w3.Code)
 	assert.Equal(t, "200", w3.Body.String())
+}
+
+func TestListHandler_EscapesMetricName(t *testing.T) {
+	store := NewMockStorage()
+	_ = store.Save(context.Background(), model.NewGaugeMetric(`<script>alert("x")</script>&'`, 1))
+
+	router := createTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "<li><b>&lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt;&amp;&#39;</b> [Gauge] = 1</li>")
+	assert.NotContains(t, body, "<script>")
+}
+
+func TestUpdateHandler_NonFiniteGaugeRejected(t *testing.T) {
+	for _, value := range []string{"NaN", "nan", "Inf", "+Inf", "-Inf", "infinity", "+Infinity", "-Infinity"} {
+		t.Run(value, func(t *testing.T) {
+			store := NewMockStorage()
+			_ = store.Save(context.Background(), model.NewGaugeMetric("Alloc", 12.5))
+			router := createTestRouter(store)
+
+			req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/"+value, nil)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), "Invalid metric value")
+
+			stored, err := store.Get(context.Background(), model.Gauge, "Alloc")
+			assert.NoError(t, err)
+			assert.Equal(t, 12.5, stored.Value)
+		})
+	}
+}
+
+func TestUpdateHandler_NaNGaugeNotSaved(t *testing.T) {
+	store := NewMockStorage()
+	router := createTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/NaN", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	_, err := store.Get(context.Background(), model.Gauge, "Alloc")
+	assert.ErrorIs(t, err, storage.ErrNotFound)
+}
+
+func TestUpdateHandler_LargeFiniteGaugeAccepted(t *testing.T) {
+	store := NewMockStorage()
+	router := createTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/1e308", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	stored, err := store.Get(context.Background(), model.Gauge, "Alloc")
+	assert.NoError(t, err)
+	assert.Equal(t, 1e308, stored.Value)
 }

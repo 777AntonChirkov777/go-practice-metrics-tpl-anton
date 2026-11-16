@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"practice/internal/hash"
-	model "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/server"
 	"practice/internal/storage"
 )

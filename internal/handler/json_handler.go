@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/storage"
 )
 

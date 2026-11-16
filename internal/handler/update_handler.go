@@ -1,14 +1,15 @@
-package handlers
+package handler
 
 import (
 	"bytes"
 	"errors"
+	"html"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 	"practice/internal/storage"
 
 	"github.com/go-chi/chi/v5"
@@ -47,16 +48,18 @@ func NewHandler(store storage.MetricStorage, auditor Auditor) *Handler {
 // значение метрики, переданное сегментами пути.
 //
 // Тип (gauge или counter) сравнивается без учёта регистра, name и value
-// очищаются от пробелов по краям. Для gauge значение разбирается как float64 и
-// заменяет прежнее, для counter — как десятичное int64 и прибавляется к
-// накопленному. Тело запроса не читается, тело успешного ответа пустое.
+// очищаются от пробелов по краям. Для gauge значение разбирается как конечное
+// число float64 и заменяет прежнее, для counter — как десятичное int64 и
+// прибавляется к накопленному. Тело запроса не читается, тело успешного ответа
+// пустое.
 //
 // Коды ответа:
 //   - 200 — метрика сохранена;
 //   - 400 — тип пуст или имя либо значение пусты после обрезки пробелов
 //     ("Expected /update/{type}/{name}/{value}"),
 //     неизвестный тип ("Invalid metric type") или значение не разбирается как
-//     число нужного типа ("Invalid metric value");
+//     число нужного типа, в том числе NaN или ±Inf для gauge ("Invalid metric
+//     value");
 //   - 500 — хранилище вернуло ошибку ("storage error: ...").
 //
 // При включённом аудите после сохранения вызывается [Auditor.Record] с именем
@@ -153,8 +156,7 @@ func (h *Handler) ValueHandler(res http.ResponseWriter, req *http.Request) {
 //
 // Каждая метрика выводится элементом списка в виде "имя [тип] = значение", для
 // пустого хранилища — строкой "no metrics yet". Ответ приходит с Content-Type
-// "text/html; charset=utf-8". Имена метрик в разметку выводятся как есть, без
-// экранирования.
+// "text/html; charset=utf-8".
 //
 // Коды ответа:
 //   - 200 — страница сформирована;
@@ -179,7 +181,7 @@ func (h *Handler) ListHandler(res http.ResponseWriter, req *http.Request) {
 	var scratch [32]byte
 	for _, m := range all {
 		buf.WriteString("<li><b>")
-		buf.WriteString(m.ID)
+		buf.WriteString(html.EscapeString(m.ID))
 		buf.WriteString("</b> [")
 		buf.WriteString(model.MetricType(m.MType).String())
 		buf.WriteString("] = ")

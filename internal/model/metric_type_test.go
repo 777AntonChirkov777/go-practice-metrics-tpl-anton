@@ -1,4 +1,4 @@
-package models
+package model
 
 import (
 	"testing"
@@ -60,6 +60,13 @@ func TestIsParseMetricValue(t *testing.T) {
 		{"gauge negative", Gauge, "-0.5", true},
 		{"gauge invalid", Gauge, "abc", false},
 		{"gauge empty", Gauge, "", false},
+		{"gauge NaN", Gauge, "NaN", false},
+		{"gauge nan lowercase", Gauge, "nan", false},
+		{"gauge Inf", Gauge, "Inf", false},
+		{"gauge plus Inf", Gauge, "+Inf", false},
+		{"gauge minus Inf", Gauge, "-Inf", false},
+		{"gauge infinity", Gauge, "infinity", false},
+		{"gauge near max", Gauge, "1e308", true},
 		// Counter valid
 		{"counter positive", Counter, "100", true},
 		{"counter negative", Counter, "-1", true},
@@ -93,6 +100,11 @@ func TestParseGauge(t *testing.T) {
 		{"valid float", Gauge, "3.14", 3.14, false},
 		{"valid negative", Counter, "-10.5", -10.5, false}, // uses Counter type but still works
 		{"invalid", Unknown, "abc", 0, true},
+		{"NaN", Gauge, "NaN", 0, true},
+		{"plus Inf", Gauge, "+Inf", 0, true},
+		{"minus Inf", Gauge, "-Inf", 0, true},
+		{"infinity", Gauge, "infinity", 0, true},
+		{"near max", Gauge, "1e308", 1e308, false},
 	}
 
 	for _, tt := range tests {

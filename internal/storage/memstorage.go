@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	model "practice/internal/model"
+	"practice/internal/model"
 )
 
 type MemStorage struct {

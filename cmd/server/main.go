@@ -18,7 +18,7 @@ import (
 	"practice/internal/db"
 	"practice/internal/dbstore"
 	"practice/internal/filestore"
-	handlers "practice/internal/handler"
+	"practice/internal/handler"
 	"practice/internal/logger"
 	"practice/internal/server"
 	"practice/internal/storage"
@@ -58,7 +58,7 @@ func run() error {
 	}
 	auditor.Start()
 
-	var pinger handlers.Pinger
+	var pinger handler.Pinger
 	conn, err := db.New(cfg.DatabaseDSN)
 	if err != nil {
 		logger.Log.Info("database open failed", zap.Error(err))
