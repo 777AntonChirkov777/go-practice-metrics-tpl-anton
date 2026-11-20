@@ -1,0 +1,24 @@
+name: panicexit linter
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  linter:
+    runs-on: ubuntu-latest
+    container: golang:1.26
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Test linter
+        run: |
+          go test ./cmd/linter/...
+
+      - name: Run linter
+        run: |
+          go run ./cmd/linter ./...

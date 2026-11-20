@@ -20,13 +20,12 @@ func RequestLogger(next http.Handler) http.Handler {
 		method := r.Method
 
 		lw := newLoggingResponseWriter(w)
+		completed := false
 
 		// Логируем в defer: строки появятся и когда хендлер паникует.
 		defer func() {
-			rec := recover()
-
 			status := lw.status
-			if rec != nil && !lw.wroteHeader {
+			if !completed && !lw.wroteHeader {
 				status = 0 // клиент получил оборванное соединение, а не 200
 			}
 
@@ -35,9 +34,9 @@ func RequestLogger(next http.Handler) http.Handler {
 				zap.String("method", method),
 				zap.Duration("duration", time.Since(start)),
 			}
-			if rec != nil {
+			if !completed {
 				// panic — это поле, а не уровень: по заданию всё на Info.
-				reqFields = append(reqFields, zap.Any("panic", rec))
+				reqFields = append(reqFields, zap.Bool("panic", true))
 			}
 
 			Log.Info("request", reqFields...)
@@ -45,13 +44,9 @@ func RequestLogger(next http.Handler) http.Handler {
 				zap.Int("status", status),
 				zap.Int("size", lw.size),
 			)
-
-			if rec != nil {
-				// Отдаём панику net/http, чтобы соединение закрылось штатно.
-				panic(rec)
-			}
 		}()
 
 		next.ServeHTTP(lw, r) // именно lw, а не w
+		completed = true
 	})
 }
