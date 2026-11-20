@@ -51,6 +51,7 @@ func TestRequestLoggerWritesTwoInfoEntries(t *testing.T) {
 	assert.Equal(t, "/update/gauge/x/1", reqFields["uri"])
 	assert.Equal(t, "POST", reqFields["method"])
 	assert.Contains(t, reqFields, "duration")
+	assert.NotContains(t, reqFields, "panic")
 
 	assert.Equal(t, zapcore.InfoLevel, entries[1].Level)
 	assert.Equal(t, "response", entries[1].Message)
@@ -76,7 +77,7 @@ func TestRequestLoggerDefaultsToStatus200(t *testing.T) {
 	assert.EqualValues(t, 2, entries[1].ContextMap()["size"])
 }
 
-func TestRequestLoggerLogsPanicAndRepanics(t *testing.T) {
+func TestRequestLoggerLogsPanicAndPropagates(t *testing.T) {
 	logs := withObservedLog(t)
 
 	h := RequestLogger(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -90,9 +91,27 @@ func TestRequestLoggerLogsPanicAndRepanics(t *testing.T) {
 	entries := logs.All()
 	require.Len(t, entries, 2)
 	assert.Equal(t, zapcore.InfoLevel, entries[0].Level)
-	assert.Equal(t, "boom", entries[0].ContextMap()["panic"])
+	assert.Equal(t, true, entries[0].ContextMap()["panic"])
 	// заголовок не отправлен — 200 подставлять нельзя
 	assert.EqualValues(t, 0, entries[1].ContextMap()["status"])
+}
+
+func TestRequestLoggerKeepsStatusWrittenBeforePanic(t *testing.T) {
+	logs := withObservedLog(t)
+
+	h := RequestLogger(http.HandlerFunc(func(res http.ResponseWriter, _ *http.Request) {
+		res.WriteHeader(http.StatusCreated)
+		panic("boom")
+	}))
+
+	assert.PanicsWithValue(t, "boom", func() {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	})
+
+	entries := logs.All()
+	require.Len(t, entries, 2)
+	assert.Equal(t, true, entries[0].ContextMap()["panic"])
+	assert.EqualValues(t, http.StatusCreated, entries[1].ContextMap()["status"])
 }
 
 // loggingResponseWriter должен запоминать первый статус: net/http учитывает
