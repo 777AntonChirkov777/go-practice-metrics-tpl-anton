@@ -1,0 +1,3 @@
+a/a.go:5:2: T has a field named Reset that conflicts with the generated Reset method
+a/a.go:12:2: U has an embedded field named Reset that conflicts with the generated Reset method
+a/a.go:18:3: V has an embedded field named Reset that conflicts with the generated Reset method

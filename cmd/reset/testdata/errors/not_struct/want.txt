@@ -1,0 +1,7 @@
+a/a.go:8:6: cannot generate Reset for ID: generate:reset is allowed only on "type T struct{...}" declarations
+a/a.go:11:6: cannot generate Reset for List:
+a/a.go:14:6: cannot generate Reset for Dict:
+a/a.go:17:6: cannot generate Reset for Iface:
+a/a.go:22:6: cannot generate Reset for Fn:
+a/a.go:25:6: cannot generate Reset for Defined:
+a/a.go:28:6: cannot generate Reset for type alias Alias:

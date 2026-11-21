@@ -1,0 +1,2 @@
+a/reset.gen.go:13:10: generated code does not compile: cannot use struct{x int}{} (value of type struct{x int}) as struct{x int} value in assignment
+a/reset.gen.go:17:22: generated code does not compile: name hidden not exported by package other
