@@ -1,0 +1,1 @@
+a/a.go:11:11: cannot use T{} (value of struct type T) as I value in variable declaration: T does not implement I (wrong type for method M); have M(int); want M()

@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+// generate:reset
 type Metric struct {
 	ID    string  `json:"id"`
 	MType int8    `json:"type"`

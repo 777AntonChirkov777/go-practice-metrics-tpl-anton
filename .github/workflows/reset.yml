@@ -1,0 +1,20 @@
+name: reset generator
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    container: golang:1.26
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Test reset generator
+        run: |
+          go test -race -count=1 ./cmd/reset/...

@@ -2,6 +2,7 @@ package audit
 
 import "context"
 
+// generate:reset
 type Event struct {
 	Timestamp int64    `json:"ts"`
 	Metrics   []string `json:"metrics"`

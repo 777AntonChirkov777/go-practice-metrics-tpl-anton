@@ -1,0 +1,2 @@
+a/a.go:10:7: cannot generate Reset for local type L: generate:reset applies only to package-level struct types
+a/a.go:18:3: cannot generate Reset for local type M: generate:reset applies only to package-level struct types

@@ -113,6 +113,25 @@ func TestMetric_CalculateHash(t *testing.T) {
 	}
 }
 
+func TestMetric_Reset(t *testing.T) {
+	m := &Metric{ID: "cpu", MType: int8(Gauge), Delta: 42, Value: 75.5, Hash: "abc"}
+
+	m.Reset()
+
+	if m.ID != "" || m.Hash != "" {
+		t.Errorf("ID = %q, Hash = %q, want empty", m.ID, m.Hash)
+	}
+	if m.MType != 0 || m.Delta != 0 {
+		t.Errorf("MType = %d, Delta = %d, want 0", m.MType, m.Delta)
+	}
+	if m.Value != 0 {
+		t.Errorf("Value = %v, want 0", m.Value)
+	}
+
+	var nilMetric *Metric
+	nilMetric.Reset()
+}
+
 func TestMetric_JSONOmitEmpty(t *testing.T) {
 	// Проверяем, что поля Value и Delta не выводятся, если равны нулю
 	g := NewGaugeMetric("mem", 0.0)

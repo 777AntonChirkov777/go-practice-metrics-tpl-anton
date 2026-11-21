@@ -1,0 +1,4 @@
+a/clear.go:3:6: package-level clear shadows the predeclared clear used by the generated Reset methods
+b/new.go:3:5: package-level new shadows the predeclared new used by the generated Reset methods
+c/c.go:3:7: package-level false shadows the predeclared false used by the generated Reset methods
+d/d.go:4:10: cannot generate Reset for Box: type parameter max has the name of a predeclared identifier

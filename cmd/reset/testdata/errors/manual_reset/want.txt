@@ -1,0 +1,2 @@
+a/a.go:8:13: T has a hand-written Reset method that conflicts with the generated one
+a/a.go:17:12: U has a hand-written Reset method that conflicts with the generated one
