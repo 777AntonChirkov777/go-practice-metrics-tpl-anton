@@ -1,0 +1,20 @@
+name: generic pool
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  pool:
+    runs-on: ubuntu-latest
+    container: golang:1.26
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Test pool
+        run: |
+          go test -race -count=1 ./internal/pool/...
