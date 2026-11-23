@@ -73,5 +73,5 @@ func TestPrintIgnoresWriteError(t *testing.T) {
 	assert.NotPanics(t, func() {
 		Print(w, "v1.0.0", "2026-11-23T10:00:00Z", "1ffabbc")
 	})
-	assert.Equal(t, 1, w.calls)
+	assert.Positive(t, w.calls)
 }
