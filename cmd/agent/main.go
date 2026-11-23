@@ -8,13 +8,21 @@ import (
 	"syscall"
 
 	agent "practice/internal/agent"
+	"practice/internal/buildinfo"
 	config "practice/internal/config"
 	"practice/internal/logger"
 
 	"go.uber.org/zap"
 )
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
 func main() {
+	buildinfo.Print(os.Stdout, buildVersion, buildDate, buildCommit)
 
 	// Уровень зафиксирован: по заданию все сообщения логгера — Info.
 	if err := logger.Initialize("info"); err != nil {

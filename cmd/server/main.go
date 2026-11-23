@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"practice/internal/audit"
+	"practice/internal/buildinfo"
 	config "practice/internal/config"
 	"practice/internal/db"
 	"practice/internal/dbstore"
@@ -29,7 +30,15 @@ import (
 
 const dbStartupTimeout = 2 * time.Second
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
 func main() {
+	buildinfo.Print(os.Stdout, buildVersion, buildDate, buildCommit)
+
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
