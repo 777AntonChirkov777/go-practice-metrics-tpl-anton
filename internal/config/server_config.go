@@ -18,6 +18,7 @@ type ServerConfig struct {
 	Key             string
 	AuditFile       string
 	AuditURL        string
+	CryptoKey       string
 }
 
 func GetServerConfig(args []string) (*ServerConfig, error) {
@@ -41,6 +42,7 @@ func GetServerConfig(args []string) (*ServerConfig, error) {
 	cfg.Key = flagCfg.Key
 	cfg.AuditFile = flagCfg.AuditFile
 	cfg.AuditURL = flagCfg.AuditURL
+	cfg.CryptoKey = flagCfg.CryptoKey
 
 	// Слой окружения. Переопределяем только присутствующие (не-nil) поля.
 	envCfg, err := env.GetServerConfigEnv()
@@ -70,6 +72,9 @@ func GetServerConfig(args []string) (*ServerConfig, error) {
 	}
 	if envCfg.AuditURL != nil && *envCfg.AuditURL != "" {
 		cfg.AuditURL = *envCfg.AuditURL
+	}
+	if envCfg.CryptoKey != nil && *envCfg.CryptoKey != "" {
+		cfg.CryptoKey = *envCfg.CryptoKey
 	}
 
 	return cfg, nil

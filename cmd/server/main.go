@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	config "practice/internal/config"
 	"practice/internal/db"
 	"practice/internal/dbstore"
+	"practice/internal/encryption"
 	"practice/internal/filestore"
 	"practice/internal/handler"
 	"practice/internal/logger"
@@ -57,6 +59,14 @@ func run() error {
 	}
 	defer logger.Sync()
 
+	var privateKey *rsa.PrivateKey
+	if cfg.CryptoKey != "" {
+		privateKey, err = encryption.LoadPrivateKey(cfg.CryptoKey)
+		if err != nil {
+			return fmt.Errorf("error crypto key: %w", err)
+		}
+	}
+
 	// Контекст, отменяемый по SIGINT/SIGTERM, — сигнал к остановке.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -78,7 +88,7 @@ func run() error {
 
 	metricStore, onShutdown := buildStorage(ctx, cfg, conn)
 
-	r := server.NewRouter(metricStore, auditor, pinger, cfg.Key)
+	r := server.NewRouter(metricStore, auditor, pinger, cfg.Key, privateKey)
 
 	_, port, err := net.SplitHostPort(cfg.Address)
 	if err != nil {
@@ -94,7 +104,9 @@ func run() error {
 		}
 	}()
 
-	logger.Log.Info("server started", zap.String("address", cfg.Address))
+	logger.Log.Info("server started",
+		zap.String("address", cfg.Address),
+		zap.Bool("encryption", privateKey != nil))
 
 	var runErr error
 	select {

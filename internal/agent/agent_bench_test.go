@@ -16,13 +16,13 @@ var (
 )
 
 func benchAgent() *Agent {
-	a := NewAgent(time.Second, time.Second, "http://127.0.0.1:8080", benchAgentKey, 1)
+	a := NewAgent(time.Second, time.Second, "http://127.0.0.1:8080", benchAgentKey, 1, nil)
 	a.CollectMetrics()
 	return a
 }
 
 func BenchmarkAgentCollectMetrics(b *testing.B) {
-	a := NewAgent(time.Second, time.Second, "http://127.0.0.1:8080", benchAgentKey, 1)
+	a := NewAgent(time.Second, time.Second, "http://127.0.0.1:8080", benchAgentKey, 1, nil)
 
 	b.ReportAllocs()
 	b.ResetTimer()

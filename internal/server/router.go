@@ -1,9 +1,11 @@
 package server
 
 import (
+	"crypto/rsa"
 	"net/http"
 
 	"practice/internal/compress"
+	"practice/internal/encryption"
 	"practice/internal/handler"
 	"practice/internal/hash"
 	"practice/internal/logger"
@@ -12,11 +14,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(store storage.MetricStorage, auditor handler.Auditor, pinger handler.Pinger, key string) http.Handler {
+func NewRouter(store storage.MetricStorage, auditor handler.Auditor, pinger handler.Pinger, key string, privateKey *rsa.PrivateKey) http.Handler {
 	h := handler.NewHandler(store, auditor)
 
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger)
+	r.Use(encryption.Middleware(privateKey))
 	r.Use(compress.Middleware)
 	r.Use(hash.Middleware(key))
 	r.Get("/", h.ListHandler)

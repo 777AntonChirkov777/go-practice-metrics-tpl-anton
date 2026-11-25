@@ -24,7 +24,7 @@ type okPinger struct{}
 func (okPinger) PingContext(context.Context) error { return nil }
 
 func ExampleHandler_UpdateHandler() {
-	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, ""))
+	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, "", nil))
 	defer srv.Close()
 
 	for _, path := range []string{
@@ -53,7 +53,7 @@ func ExampleHandler_UpdateHandler() {
 }
 
 func ExampleHandler_ValueHandler() {
-	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, ""))
+	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, "", nil))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/update/gauge/Alloc/12.5", "text/plain", nil)
@@ -84,7 +84,7 @@ func ExampleHandler_ValueHandler() {
 }
 
 func ExampleHandler_ListHandler() {
-	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, ""))
+	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, "", nil))
 	defer srv.Close()
 
 	for _, path := range []string{"/update/gauge/Alloc/12.5", "/update/counter/PollCount/3"} {
@@ -119,7 +119,7 @@ func ExampleHandler_ListHandler() {
 }
 
 func ExampleHandler_UpdateJSONHandler() {
-	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, ""))
+	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, "", nil))
 	defer srv.Close()
 
 	for _, payload := range []string{
@@ -148,7 +148,7 @@ func ExampleHandler_UpdateJSONHandler() {
 }
 
 func ExampleHandler_ValueJSONHandler() {
-	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, ""))
+	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, "", nil))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/update/", "application/json",
@@ -183,7 +183,7 @@ func ExampleHandler_ValueJSONHandler() {
 }
 
 func ExampleHandler_UpdatesJSONHandler() {
-	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, ""))
+	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, "", nil))
 	defer srv.Close()
 
 	for _, payload := range []string{
@@ -229,7 +229,7 @@ func ExampleHandler_UpdatesJSONHandler() {
 func ExampleHandler_UpdatesJSONHandler_agent() {
 	const key = "secret"
 
-	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, key))
+	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, key, nil))
 	defer srv.Close()
 
 	batch := []model.Metrics{
@@ -284,11 +284,11 @@ func ExampleHandler_UpdatesJSONHandler_agent() {
 }
 
 func ExamplePingHandler_Ping() {
-	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, ""))
+	srv := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), nil, "", nil))
 	defer srv.Close()
 
 	var db handler.Pinger = okPinger{}
-	srvDB := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), db, ""))
+	srvDB := httptest.NewServer(server.NewRouter(storage.NewMemStorage(), audit.NewNotifier(), db, "", nil))
 	defer srvDB.Close()
 
 	for _, base := range []string{srv.URL, srvDB.URL} {

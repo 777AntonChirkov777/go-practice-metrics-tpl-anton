@@ -14,6 +14,7 @@ type ServerConfigFlag struct {
 	Key             string
 	AuditFile       string
 	AuditURL        string
+	CryptoKey       string
 }
 
 func ParseServerFlags(args []string) (*ServerConfigFlag, error) {
@@ -28,6 +29,7 @@ func ParseServerFlags(args []string) (*ServerConfigFlag, error) {
 	fs.StringVar(&cfg.Key, "k", "", "ключ подписи HashSHA256")
 	fs.StringVar(&cfg.AuditFile, "audit-file", "", "путь к файлу журнала аудита (пусто — файловый приёмник выключен)")
 	fs.StringVar(&cfg.AuditURL, "audit-url", "", "URL приёмника аудита (пусто — удалённый приёмник выключен)")
+	fs.StringVar(&cfg.CryptoKey, "crypto-key", "", "путь до файла с приватным ключом шифрования")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("не удалось разобрать флаги: %w", err)

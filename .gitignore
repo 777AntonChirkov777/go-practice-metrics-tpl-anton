@@ -28,6 +28,9 @@ vendor/
 metrics-db.json
 metrics-db.json.tmp
 
+# Encryption keys (-crypto-key / CRYPTO_KEY)
+*.pem
+
 # Neural networks
 .codegraph/
 .claude/

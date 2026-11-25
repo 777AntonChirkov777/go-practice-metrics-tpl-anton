@@ -19,7 +19,7 @@ import (
 )
 
 func TestCollectMetrics(t *testing.T) {
-	agent := NewAgent(time.Second, time.Second, "http://localhost", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://localhost", "", 1, nil)
 	agent.CollectMetrics()
 
 	gauges, pollCount := agent.GetMetrics()
@@ -104,7 +104,7 @@ func TestReport(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	agent := NewAgent(time.Second, time.Second, srv.URL, "", 1)
+	agent := NewAgent(time.Second, time.Second, srv.URL, "", 1, nil)
 	agent.CollectMetrics()
 	agent.sendBatch(context.Background(), agent.snapshot())
 
@@ -183,7 +183,7 @@ func TestReportSkipsEmptyBatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	agent := NewAgent(time.Second, time.Second, srv.URL, "", 1)
+	agent := NewAgent(time.Second, time.Second, srv.URL, "", 1, nil)
 	if agent.dispatch(context.Background()) {
 		t.Error("пустой снимок не должен порождать задания воркеру")
 	}
@@ -240,7 +240,7 @@ func TestReportConcurrentWithCollect(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	agent := NewAgent(time.Second, time.Second, srv.URL, "", 1)
+	agent := NewAgent(time.Second, time.Second, srv.URL, "", 1, nil)
 	agent.CollectMetrics()
 
 	const rounds = 50
@@ -330,7 +330,7 @@ func TestSendBatchRetriesServerError(t *testing.T) {
 		http.StatusOK,
 	}}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1, nil)
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{0, 0, 0}
 
@@ -351,7 +351,7 @@ func TestSendBatchRetriesServerError(t *testing.T) {
 func TestSendBatchDoesNotRetryClientError(t *testing.T) {
 	tr := &stubTransport{statuses: []int{http.StatusBadRequest}}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1, nil)
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{0, 0, 0}
 
@@ -369,7 +369,7 @@ func TestSendBatchDoesNotRetryClientError(t *testing.T) {
 func TestSendBatchDoesNotRetryUnbuildableRequest(t *testing.T) {
 	tr := &stubTransport{}
 
-	agent := NewAgent(time.Second, time.Second, "http://\x7f", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://\x7f", "", 1, nil)
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{time.Hour, time.Hour, time.Hour}
 
@@ -398,7 +398,7 @@ func TestSendBatchDoesNotRetryUnbuildableRequest(t *testing.T) {
 func TestSendBatchRetriesTransportFailure(t *testing.T) {
 	tr := &stubTransport{failures: 2}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1, nil)
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{0, 0, 0}
 
@@ -446,7 +446,7 @@ func TestSendBatchStopsWhenContextCanceled(t *testing.T) {
 
 	tr := &stubTransport{failures: 100, onCall: cancel}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1, nil)
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{30 * time.Second, 30 * time.Second, 30 * time.Second}
 
@@ -481,7 +481,7 @@ func gunzipBody(t *testing.T, body []byte) []byte {
 func TestSendBatchSignsUncompressedBody(t *testing.T) {
 	tr := &stubTransport{}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "secret", 1)
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "secret", 1, nil)
 	agent.client = &http.Client{Transport: tr}
 
 	agent.CollectMetrics()
@@ -503,7 +503,7 @@ func TestSendBatchSignsUncompressedBody(t *testing.T) {
 func TestSendBatchWithoutKeyIsUnsigned(t *testing.T) {
 	tr := &stubTransport{}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "", 1, nil)
 	agent.client = &http.Client{Transport: tr}
 
 	agent.CollectMetrics()
@@ -526,7 +526,7 @@ func TestSendBatchRetryKeepsSignature(t *testing.T) {
 		http.StatusOK,
 	}}
 
-	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "secret", 1)
+	agent := NewAgent(time.Second, time.Second, "http://metrics.invalid", "secret", 1, nil)
 	agent.client = &http.Client{Transport: tr}
 	agent.retryDelays = []time.Duration{0, 0, 0}
 

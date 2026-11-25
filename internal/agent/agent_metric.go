@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"io"
 	"math/rand"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"practice/internal/encryption"
 	"practice/internal/hash"
 	"practice/internal/logger"
 	"practice/internal/model"
@@ -26,6 +28,7 @@ type Agent struct {
 	reportInterval time.Duration
 	serverURL      string
 	key            string
+	publicKey      *rsa.PublicKey
 	client         *http.Client
 	retryDelays    []time.Duration
 	rateLimit      int
@@ -38,12 +41,13 @@ type Agent struct {
 }
 
 // NewAgent создает новый экземпляр агента.
-func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string, rateLimit int) *Agent {
+func NewAgent(pollInterval, reportInterval time.Duration, serverURL, key string, rateLimit int, publicKey *rsa.PublicKey) *Agent {
 	return &Agent{
 		pollInterval:   pollInterval,
 		reportInterval: reportInterval,
 		serverURL:      serverURL,
 		key:            key,
+		publicKey:      publicKey,
 		client:         &http.Client{Timeout: 5 * time.Second},
 		retryDelays:    retry.DefaultDelays,
 		rateLimit:      rateLimit,
@@ -153,6 +157,15 @@ func (a *Agent) sendBatch(ctx context.Context, batch []model.Metrics) {
 		return
 	}
 
+	if a.publicKey != nil {
+		body, err = encryption.Encrypt(a.publicKey, body)
+		if err != nil {
+			logger.Log.Info("encrypt batch failed",
+				zap.Int("metrics", len(batch)), zap.Error(err))
+			return
+		}
+	}
+
 	err = retry.Do(ctx, "agent.sendBatch", a.retryDelays, isRetriable,
 		func(ctx context.Context) error {
 			return a.postBatch(ctx, url, body, sign)
@@ -172,6 +185,9 @@ func (a *Agent) postBatch(ctx context.Context, url string, body []byte, sign str
 	// упаковано на проводе. Оба заголовка обязательны.
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
+	if a.publicKey != nil {
+		req.Header.Set(encryption.Header, encryption.Scheme)
+	}
 	if sign != "" {
 		req.Header.Set(hash.Header, sign)
 	}
