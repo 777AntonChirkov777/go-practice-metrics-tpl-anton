@@ -14,6 +14,7 @@ type AgentConfigFlag struct {
 	PollInterval   time.Duration
 	Key            string
 	RateLimit      int
+	CryptoKey      string
 }
 
 // ParseAgentFlags обрабатывает аргументы командной строки для агента.
@@ -28,8 +29,9 @@ func ParseAgentFlags(args []string) (*AgentConfigFlag, error) {
 	fs.IntVar(&pollSec, "p", 2, "частота опроса метрик runtime (в секундах)")
 	fs.StringVar(&cfg.Key, "k", "", "ключ подписи HashSHA256")
 	fs.IntVar(&cfg.RateLimit, "l", 1, "предел одновременно исходящих запросов к серверу")
+	fs.StringVar(&cfg.CryptoKey, "crypto-key", "", "путь до файла с публичным ключом шифрования")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Агент: %s -a=<адрес> -r=<сек> -p=<сек> -k=<ключ> -l=<число>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Агент: %s -a=<адрес> -r=<сек> -p=<сек> -k=<ключ> -l=<число> -crypto-key=<путь>\n", os.Args[0])
 		fs.PrintDefaults()
 	}
 

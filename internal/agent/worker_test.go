@@ -41,7 +41,7 @@ func TestWorkerPoolLimitsConcurrentRequests(t *testing.T) {
 	defer srv.Close()
 	defer releaseAll()
 
-	agent := NewAgent(time.Hour, time.Hour, srv.URL, "", limit)
+	agent := NewAgent(time.Hour, time.Hour, srv.URL, "", limit, nil)
 	agent.CollectMetrics()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -119,7 +119,7 @@ func TestDispatchQueuesReportWhileWorkerIsBusy(t *testing.T) {
 	defer srv.Close()
 	defer releaseAll()
 
-	agent := NewAgent(time.Hour, time.Hour, srv.URL, "", 1)
+	agent := NewAgent(time.Hour, time.Hour, srv.URL, "", 1, nil)
 	agent.CollectMetrics()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -178,7 +178,7 @@ func TestDispatchWaitsWhenQueueIsFull(t *testing.T) {
 	defer srv.Close()
 	defer releaseAll()
 
-	agent := NewAgent(time.Hour, time.Hour, srv.URL, "", 1)
+	agent := NewAgent(time.Hour, time.Hour, srv.URL, "", 1, nil)
 	agent.CollectMetrics()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -231,7 +231,7 @@ func TestDispatchWaitsWhenQueueIsFull(t *testing.T) {
 }
 
 func TestDispatchStopsWaitingOnCancel(t *testing.T) {
-	agent := NewAgent(time.Hour, time.Hour, "http://metrics.invalid", "", 1)
+	agent := NewAgent(time.Hour, time.Hour, "http://metrics.invalid", "", 1, nil)
 	agent.CollectMetrics()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -272,7 +272,7 @@ func TestStartStopsAllGoroutines(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	agent := NewAgent(10*time.Millisecond, 10*time.Millisecond, srv.URL, "", 3)
+	agent := NewAgent(10*time.Millisecond, 10*time.Millisecond, srv.URL, "", 3, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	agent.Start(ctx)

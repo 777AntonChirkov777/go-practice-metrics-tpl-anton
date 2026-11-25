@@ -101,7 +101,7 @@ func newLoad(key string, acceptGzip bool) *load {
 	store.LoadAll(preset)
 
 	l := &load{
-		handler:    server.NewRouter(store, nullAuditor{}, nil, key),
+		handler:    server.NewRouter(store, nullAuditor{}, nil, key, nil),
 		acceptGzip: acceptGzip,
 		paths:      make([]string, len(gaugeNames)),
 		updates:    make([][]byte, len(gaugeNames)),

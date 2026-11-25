@@ -19,6 +19,7 @@ func clearAgentEnv(t *testing.T) {
 	t.Setenv("POLL_INTERVAL", "")
 	t.Setenv("KEY", "")
 	t.Setenv("RATE_LIMIT", "")
+	t.Setenv("CRYPTO_KEY", "")
 }
 
 func TestGetAgentConfig_AddressFromEnvOnly(t *testing.T) {
@@ -327,5 +328,55 @@ func TestGetAgentConfig_NegativeEnvRateLimitIsLogged(t *testing.T) {
 	}
 	if got := entries[0].ContextMap()["value"]; got != int64(-5) {
 		t.Errorf("value = %v (%T), want -5: в логе должно быть отвергнутое значение", got, got)
+	}
+}
+
+func TestGetAgentConfig_CryptoKeyFromFlag(t *testing.T) {
+	clearAgentEnv(t)
+
+	cfg, err := GetAgentConfig([]string{"-crypto-key=public.pem"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CryptoKey != "public.pem" {
+		t.Errorf("CryptoKey = %q, want public.pem", cfg.CryptoKey)
+	}
+}
+
+func TestGetAgentConfig_CryptoKeyFromEnvOnly(t *testing.T) {
+	clearAgentEnv(t)
+	t.Setenv("CRYPTO_KEY", "env.pem")
+
+	cfg, err := GetAgentConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CryptoKey != "env.pem" {
+		t.Errorf("CryptoKey = %q, want env.pem", cfg.CryptoKey)
+	}
+}
+
+func TestGetAgentConfig_EnvCryptoKeyOverridesFlag(t *testing.T) {
+	clearAgentEnv(t)
+	t.Setenv("CRYPTO_KEY", "env.pem")
+
+	cfg, err := GetAgentConfig([]string{"-crypto-key=flag.pem"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CryptoKey != "env.pem" {
+		t.Errorf("CryptoKey = %q, want env.pem", cfg.CryptoKey)
+	}
+}
+
+func TestGetAgentConfig_NoCryptoKey(t *testing.T) {
+	clearAgentEnv(t)
+
+	cfg, err := GetAgentConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CryptoKey != "" {
+		t.Errorf("CryptoKey = %q, want empty", cfg.CryptoKey)
 	}
 }

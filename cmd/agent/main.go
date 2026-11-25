@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"os"
 	"os/signal"
@@ -10,6 +11,7 @@ import (
 	agent "practice/internal/agent"
 	"practice/internal/buildinfo"
 	config "practice/internal/config"
+	"practice/internal/encryption"
 	"practice/internal/logger"
 
 	"go.uber.org/zap"
@@ -37,11 +39,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	var publicKey *rsa.PublicKey
+	if acfg.CryptoKey != "" {
+		publicKey, err = encryption.LoadPublicKey(acfg.CryptoKey)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ошибка загрузки ключа шифрования: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	logger.Log.Info("agent started",
 		zap.String("server_address", acfg.Address),
 		zap.Duration("report_interval", acfg.ReportInterval),
 		zap.Duration("poll_interval", acfg.PollInterval),
 		zap.Bool("signing", acfg.Key != ""),
+		zap.Bool("encryption", publicKey != nil),
 		zap.Int("rate_limit", acfg.RateLimit),
 	)
 
@@ -51,6 +63,7 @@ func main() {
 		"http://"+acfg.Address,
 		acfg.Key,
 		acfg.RateLimit,
+		publicKey,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

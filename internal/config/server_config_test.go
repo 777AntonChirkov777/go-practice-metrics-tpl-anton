@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var serverEnvKeys = []string{"ADDRESS", "STORE_INTERVAL", "FILE_STORAGE_PATH", "RESTORE", "DATABASE_DSN", "KEY", "AUDIT_FILE", "AUDIT_URL"}
+var serverEnvKeys = []string{"ADDRESS", "STORE_INTERVAL", "FILE_STORAGE_PATH", "RESTORE", "DATABASE_DSN", "KEY", "AUDIT_FILE", "AUDIT_URL", "CRYPTO_KEY"}
 
 func resetServerEnv(t *testing.T) {
 	t.Helper()
@@ -316,5 +316,55 @@ func TestGetServerConfig_AuditNotConfigured(t *testing.T) {
 	}
 	if cfg.AuditURL != "" {
 		t.Errorf("AuditURL = %q, want empty", cfg.AuditURL)
+	}
+}
+
+func TestGetServerConfig_CryptoKeyFromFlag(t *testing.T) {
+	resetServerEnv(t)
+
+	cfg, err := GetServerConfig([]string{"-crypto-key=private.pem"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CryptoKey != "private.pem" {
+		t.Errorf("CryptoKey = %q, want private.pem", cfg.CryptoKey)
+	}
+}
+
+func TestGetServerConfig_CryptoKeyFromEnvOnly(t *testing.T) {
+	resetServerEnv(t)
+	t.Setenv("CRYPTO_KEY", "env.pem")
+
+	cfg, err := GetServerConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CryptoKey != "env.pem" {
+		t.Errorf("CryptoKey = %q, want env.pem", cfg.CryptoKey)
+	}
+}
+
+func TestGetServerConfig_EnvCryptoKeyOverridesFlag(t *testing.T) {
+	resetServerEnv(t)
+	t.Setenv("CRYPTO_KEY", "env.pem")
+
+	cfg, err := GetServerConfig([]string{"-crypto-key=flag.pem"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CryptoKey != "env.pem" {
+		t.Errorf("CryptoKey = %q, want env.pem", cfg.CryptoKey)
+	}
+}
+
+func TestGetServerConfig_NoCryptoKey(t *testing.T) {
+	resetServerEnv(t)
+
+	cfg, err := GetServerConfig(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CryptoKey != "" {
+		t.Errorf("CryptoKey = %q, want empty", cfg.CryptoKey)
 	}
 }

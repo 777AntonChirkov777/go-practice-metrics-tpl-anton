@@ -17,6 +17,7 @@ type AgentConfig struct {
 	PollInterval   time.Duration `default:"5s"`
 	Key            string
 	RateLimit      int `default:"1"`
+	CryptoKey      string
 }
 
 func GetAgentConfig(args []string) (*AgentConfig, error) {
@@ -35,6 +36,7 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 		cfg.ReportInterval = flagCfg.ReportInterval
 		cfg.Key = flagCfg.Key
 		cfg.RateLimit = flagCfg.RateLimit
+		cfg.CryptoKey = flagCfg.CryptoKey
 	}
 
 	envCfg, err := env.GetAgentConfigEnv()
@@ -66,6 +68,9 @@ func GetAgentConfig(args []string) (*AgentConfig, error) {
 	} else if envCfg.RateLimit < 0 {
 		logger.Log.Info("RATE_LIMIT не применён: значение должно быть больше нуля",
 			zap.Int("value", envCfg.RateLimit))
+	}
+	if envCfg.CryptoKey != "" {
+		cfg.CryptoKey = envCfg.CryptoKey
 	}
 
 	return cfg, nil

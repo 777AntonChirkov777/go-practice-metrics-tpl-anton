@@ -10,7 +10,7 @@ import (
 )
 
 func TestCollectSystemMetrics(t *testing.T) {
-	agent := NewAgent(time.Second, time.Second, "http://localhost", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://localhost", "", 1, nil)
 	agent.collectSystemMetrics(context.Background())
 
 	gauges, _ := agent.GetMetrics()
@@ -46,7 +46,7 @@ func TestCollectSystemMetrics(t *testing.T) {
 }
 
 func TestCollectSystemMetricsGoesIntoReportBatch(t *testing.T) {
-	agent := NewAgent(time.Second, time.Second, "http://localhost", "", 1)
+	agent := NewAgent(time.Second, time.Second, "http://localhost", "", 1, nil)
 	agent.CollectMetrics()
 	agent.collectSystemMetrics(context.Background())
 

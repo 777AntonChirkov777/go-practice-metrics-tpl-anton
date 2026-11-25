@@ -21,7 +21,7 @@ import (
 const routerTestKey = "router-test-key"
 
 func TestRouterTextEndpointsRoundTrip(t *testing.T) {
-	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, "")
+	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, "", nil)
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/1.5", nil))
@@ -34,7 +34,7 @@ func TestRouterTextEndpointsRoundTrip(t *testing.T) {
 }
 
 func TestRouterSignedGzipJSONRoundTrip(t *testing.T) {
-	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, routerTestKey)
+	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, routerTestKey, nil)
 
 	body := mustJSON(model.NewCounterDTO(pollCountName, 7))
 
@@ -64,7 +64,7 @@ func TestRouterSignedGzipJSONRoundTrip(t *testing.T) {
 }
 
 func TestRouterRejectsInvalidSignature(t *testing.T) {
-	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, routerTestKey)
+	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, routerTestKey, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/",
 		bytes.NewReader(mustJSON(model.NewGaugeDTO("Alloc", 1))))
@@ -77,7 +77,7 @@ func TestRouterRejectsInvalidSignature(t *testing.T) {
 }
 
 func TestRouterBatchThenList(t *testing.T) {
-	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, "")
+	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, "", nil)
 
 	batch := []model.Metrics{
 		model.NewGaugeDTO("Alloc", 2.5),
@@ -100,7 +100,7 @@ func TestRouterBatchThenList(t *testing.T) {
 }
 
 func TestRouterPingWithoutDatabase(t *testing.T) {
-	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, "")
+	r := server.NewRouter(storage.NewMemStorage(), nullAuditor{}, nil, "", nil)
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ping", nil))
